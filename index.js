@@ -57,31 +57,28 @@ function mapBotmakerPayload(body) {
   const vars = body.variables || {};
   const canal = body.chatPlatform === "whatsapp" ? "WhatsApp" : "Web";
 
-  // Teléfono: en WhatsApp viene en contactId, en Web en la variable
   const telefono = canal === "WhatsApp"
     ? body.contactId
     : vars["Telefono"] || vars["Teléfono"] || null;
 
   return {
-    firstname:              vars["Nombre"]               || null,
-    lastname:               vars["Apellido"]             || null,
-    emailaddress1:          vars["Mail"]                 || vars["Email"] || null,
-    mobilephone:            telefono,
+    firstname:               vars["Nombre"]              || null,
+    lastname:                vars["Apellido"]            || null,
+    emailaddress1:           vars["Mail"]                || vars["Email"] || null,
+    mobilephone:             telefono,
     canal,
-    new_areadeinteresid:    vars["Area ID"]              || vars["AreaID"] || null,
+    new_areadeinteresid:     vars["Area ID"]             || vars["AreaID"] || null,
     new_programadeinteresid: vars["Programa ID"]         || vars["ProgramaID"] || vars["Programa Seleccionado"] || null,
-    new_utm_source:         vars["utm_source"]           || null,
-    new_utm_medium:         vars["utm_medium"]           || null,
-    new_utm_campaign:       vars["utm_campaign"]         || null,
-    new_utm_term:           vars["utm_term"]             || null,
-    new_utm_content:        vars["utm_content"]          || null,
-    new_googleclickid:      vars["gclid"]                || null,
-    new_sourceid:           vars["source_id"]            || null,
-    new_campaignid:         vars["campaign_id"]          || null,
-    new_origencandidato:    vars["origen_candidato"]     || null,
-    description:            vars["Consulta"]             || vars["descripcion"] || null,
-    // Raw de Botmaker por si se necesita
-    _botmaker_raw: body,
+    new_utm_source:          vars["utm_source"]          || null,
+    new_utm_medium:          vars["utm_medium"]          || null,
+    new_utm_campaign:        vars["utm_campaign"]        || null,
+    new_utm_term:            vars["utm_term"]            || null,
+    new_utm_content:         vars["utm_content"]         || null,
+    new_googleclickid:       vars["gclid"]               || null,
+    new_sourceid:            vars["source_id"]           || null,
+    new_campaignid:          vars["campaign_id"]         || null,
+    new_origencandidato:     vars["origen_candidato"]    || null,
+    description:             vars["Consulta"]            || vars["descripcion"] || null,
   };
 }
 
@@ -139,7 +136,6 @@ function buildLeadBody(payload, existing = null) {
     lastname: payload.lastname.trim(),
     emailaddress1: payload.emailaddress1.trim(),
   };
-
   if (payload.mobilephone) {
     const cleaned = payload.mobilephone.replace(/[\s\-()]/g, "");
     if (!existing || !existing.mobilephone) {
@@ -229,13 +225,11 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log(`   IP origen  : ${req.ip}`);
   console.log("============================================================");
 
-  // Auth: opcional si Botmaker no manda secret
-  if (WEBHOOK_SECRET && req.headers["x-webhook-secret"] !== WEBHOOK_SECRET) {
-    // Solo rechazar si el header viene con un valor incorrecto
-    // Si no viene el header, dejamos pasar (Botmaker no lo soporta)
-    if (req.headers["x-webhook-secret"]) {
-      console.error("❌ [AUTH] Webhook secret inválido");
-      return res.status(401).json({ ok: false, error: "Webhook secret inválido" });
+  // Auth con header auth-bm-token de Botmaker
+  if (WEBHOOK_SECRET && req.headers["auth-bm-token"]) {
+    if (req.headers["auth-bm-token"] !== WEBHOOK_SECRET) {
+      console.error("❌ [AUTH] Token inválido");
+      return res.status(401).json({ ok: false, error: "Token inválido" });
     }
   }
   console.log("✅ [AUTH] OK");
@@ -246,7 +240,12 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log("=== FIN PAYLOAD RAW ===\n");
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Mapear formato Botmaker → formato interno
+  // Solo procesar eventos de cierre de conversación
+  if (req.body.type && req.body.type !== "conversation_closed") {
+    console.log(`⏭️  Evento '${req.body.type}' ignorado — solo procesamos cierre de conversación`);
+    return res.status(200).json({ ok: true, skipped: true });
+  }
+
   const payload = mapBotmakerPayload(req.body);
 
   console.log("\n------------------------------------------------------------");
@@ -261,7 +260,6 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log(`   Descripción  : ${payload.description ? payload.description.slice(0, 80) + "..." : "(vacía)"}`);
   console.log("------------------------------------------------------------");
 
-  // Validar
   const errors = validatePayload(payload);
   if (errors.length > 0) {
     console.error("❌ [VALIDACIÓN] Campos inválidos o faltantes:");
