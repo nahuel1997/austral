@@ -19,11 +19,11 @@ app.use(express.json());
 
 // ─── Configuración desde variables de entorno ────────────────────────────────
 const {
-  CRM_BASE_URL,       // ej: https://<org>.crm.dynamics.com/api/data/v9.2
-  CRM_TOKEN_URL,      // ej: https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token
+  CRM_BASE_URL,
+  CRM_TOKEN_URL,
   CRM_CLIENT_ID,
   CRM_CLIENT_SECRET,
-  CRM_SCOPE,          // ej: https://<org>.crm.dynamics.com/.default
+  CRM_SCOPE,
   WEBHOOK_SECRET,
   PORT = 3000,
 } = process.env;
@@ -68,19 +68,16 @@ function crmHeaders(token) {
 function validatePayload(body) {
   const errors = [];
 
-  // Campos obligatorios
   if (!body.firstname?.trim())       errors.push("firstname es obligatorio");
   if (!body.lastname?.trim())        errors.push("lastname es obligatorio");
   if (!body.emailaddress1?.trim())   errors.push("emailaddress1 es obligatorio");
   if (!body.new_areadeinteresid)     errors.push("new_areadeinteresid es obligatorio");
   if (!body.new_programadeinteresid) errors.push("new_programadeinteresid es obligatorio");
 
-  // Teléfono obligatorio solo en canal Web
   if (body.canal === "Web" && !body.mobilephone) {
     errors.push("mobilephone es obligatorio en canal Web");
   }
 
-  // Formato nombre (solo letras, mínimo 3 chars)
   if (body.firstname && (
     body.firstname.trim().length < 3 ||
     !/^[A-Za-záéíóúÁÉÍÓÚüÜñÑ\s'-]+$/.test(body.firstname.trim())
@@ -88,7 +85,6 @@ function validatePayload(body) {
     errors.push("firstname: mínimo 3 letras, sin números ni caracteres especiales");
   }
 
-  // Formato apellido (solo letras, mínimo 2 chars)
   if (body.lastname && (
     body.lastname.trim().length < 2 ||
     !/^[A-Za-záéíóúÁÉÍÓÚüÜñÑ\s'-]+$/.test(body.lastname.trim())
@@ -96,12 +92,10 @@ function validatePayload(body) {
     errors.push("lastname: mínimo 2 letras, sin números ni caracteres especiales");
   }
 
-  // Formato email básico
   if (body.emailaddress1 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.emailaddress1)) {
     errors.push("emailaddress1: formato de correo inválido");
   }
 
-  // Formato teléfono
   if (body.mobilephone) {
     const cleaned = body.mobilephone.replace(/[\s\-()]/g, "");
     if (!/^\+?[0-9]{7,15}$/.test(cleaned)) {
@@ -117,8 +111,7 @@ async function findLeadByEmail(email, token) {
   const url =
     `${CRM_BASE_URL}/leads` +
     `?$filter=emailaddress1 eq '${encodeURIComponent(email)}'` +
-    `&$select=leadid,firstname,lastname,mobilephone,` +
-    `_new_areadeinteresid_value,_new_programadeinteresid_value` +
+    `&$select=leadid,firstname,lastname,mobilephone` +
     `&$top=1`;
 
   const { data } = await axios.get(url, { headers: crmHeaders(token) });
@@ -133,7 +126,6 @@ function buildLeadBody(payload, existing = null) {
     emailaddress1: payload.emailaddress1.trim(),
   };
 
-  // Teléfono: actualizar solo si el existente está vacío
   if (payload.mobilephone) {
     const cleaned = payload.mobilephone.replace(/[\s\-()]/g, "");
     if (!existing || !existing.mobilephone) {
@@ -153,22 +145,20 @@ function buildLeadBody(payload, existing = null) {
     body.businessunit = payload.businessunit;
   }
 
-  // ⚠️  new_facultaddeorigen: campo pendiente de verificar en Dynamics
-  // Descomentar cuando se confirme el nombre exacto del campo en el CRM:
+  // ⚠️ new_facultaddeorigen: campo pendiente de verificar en Dynamics
   // if (payload.new_facultaddeorigen && (!existing || !existing.new_facultaddeorigen)) {
   //   body.new_facultaddeorigen = payload.new_facultaddeorigen;
   // }
 
-  // Lookups: no duplicar área ni programa en el Lead
-  if (payload.new_areadeinteresid && (!existing || !existing._new_areadeinteresid_value)) {
+  // Lookups: solo en creación
+  if (payload.new_areadeinteresid && !existing) {
     body["new_areadeinteresid@odata.bind"] = `/new_intereses(${payload.new_areadeinteresid})`;
   }
 
-  if (payload.new_programadeinteresid && (!existing || !existing._new_programadeinteresid_value)) {
+  if (payload.new_programadeinteresid && !existing) {
     body["new_programadeinteresid@odata.bind"] = `/new_carreras(${payload.new_programadeinteresid})`;
   }
 
-  // Propietario
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
     body["ownerid@odata.bind"] = `/${entity}(${payload.ownerid})`;
@@ -182,7 +172,6 @@ function buildOrigenBody(payload, leadId) {
   const nombreCompleto = `${payload.firstname.trim()} ${payload.lastname.trim()}`;
   const tema = payload.new_tema || `Nueva Consulta - BOT - ${nombreCompleto}`;
 
-  // Últimos 2000 caracteres de la conversación
   const consulta = payload.description
     ? payload.description.length > 2000
       ? payload.description.slice(-2000)
@@ -218,7 +207,6 @@ function buildOrigenBody(payload, leadId) {
     body["new_actdecampanaid@odata.bind"] = `/campaignactivities(${payload.new_actdecampanaid})`;
   }
 
-  // UTMs
   const utmFields = [
     "new_utm_source", "new_utm_term", "new_utm_medium", "new_googleclickid",
     "new_utm_content", "new_campaignid", "new_utm_campaign", "new_sourceid",
@@ -235,7 +223,6 @@ async function createLead(body, token) {
   const { data, headers } = await axios.post(`${CRM_BASE_URL}/leads`, body, {
     headers: crmHeaders(token),
   });
-  // El leadid viene en el body (Prefer: return=representation) o en el header
   return data?.leadid ?? headers["odata-entityid"]?.match(/\((.+)\)/)?.[1];
 }
 
@@ -262,7 +249,7 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log(`   IP origen  : ${req.ip}`);
   console.log("============================================================");
 
-  // 1. Validar secret del webhook
+  // 1. Validar secret
   if (req.headers["x-webhook-secret"] !== WEBHOOK_SECRET) {
     console.error("❌ [AUTH] Webhook secret inválido – solicitud rechazada");
     return res.status(401).json({ ok: false, error: "Webhook secret inválido" });
@@ -270,6 +257,12 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log("✅ [AUTH] Webhook secret validado correctamente");
 
   const payload = req.body;
+
+  // ─── DEBUG TEMPORAL ────────────────────────────────────────────────────────
+  console.log("\n=== DEBUG: PAYLOAD COMPLETO ===");
+  console.log(JSON.stringify(payload, null, 2));
+  console.log("=== FIN DEBUG ===\n");
+  // ──────────────────────────────────────────────────────────────────────────
 
   // 2. Mostrar datos recibidos
   console.log("\n------------------------------------------------------------");
@@ -296,7 +289,6 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log("✅ [VALIDACIÓN] Todos los campos obligatorios son correctos");
 
   try {
-    // 4. Obtener token y buscar Lead
     console.log("\n------------------------------------------------------------");
     console.log("🔄 [3/6] ENVIANDO DATOS A DYNAMICS 365...");
     console.log(`   CRM URL : ${CRM_BASE_URL}`);
@@ -329,7 +321,6 @@ app.post("/webhook/botmaker", async (req, res) => {
     const origenBody = buildOrigenBody(payload, leadId);
     const origenId = await createOrigen(origenBody, token);
 
-    // 5. Confirmar recepción en Dynamics
     console.log("\n------------------------------------------------------------");
     console.log("📥 [4/6] DATOS RECIBIDOS Y GUARDADOS EN DYNAMICS 365:");
     console.log(`   Lead ID     : ${leadId}`);
@@ -337,7 +328,6 @@ app.post("/webhook/botmaker", async (req, res) => {
     console.log(`   Origen ID   : ${origenId}`);
     console.log("------------------------------------------------------------");
 
-    // 6. Validación final
     console.log("\n------------------------------------------------------------");
     console.log("🔍 [5/6] VALIDACIÓN FINAL:");
     console.log(`   ✅ Lead ${leadAction === "created" ? "creado" : "actualizado"} correctamente`);
@@ -349,7 +339,6 @@ app.post("/webhook/botmaker", async (req, res) => {
     ].filter(Boolean).join(" | ") || "ninguno"}`);
     console.log("------------------------------------------------------------");
 
-    // 7. Confirmación final
     console.log("\n============================================================");
     console.log("🎉 [6/6] PROCESO COMPLETADO EXITOSAMENTE");
     console.log(`   Lead ${leadAction === "created" ? "creado" : "actualizado"}: ${leadId}`);
