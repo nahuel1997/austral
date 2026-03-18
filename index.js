@@ -249,16 +249,18 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log(`   IP origen  : ${req.ip}`);
   console.log("============================================================");
 
-  // 1. Validar secret
-  if (req.headers["x-webhook-secret"] !== WEBHOOK_SECRET) {
-    console.error("❌ [AUTH] Webhook secret inválido – solicitud rechazada");
-    return res.status(401).json({ ok: false, error: "Webhook secret inválido" });
-  }
-  console.log("✅ [AUTH] Webhook secret validado correctamente");
+  // ⚠️ AUTH DESACTIVADO TEMPORALMENTE PARA DEBUG
+  // if (req.headers["x-webhook-secret"] !== WEBHOOK_SECRET) {
+  //   console.error("❌ [AUTH] Webhook secret inválido – solicitud rechazada");
+  //   return res.status(401).json({ ok: false, error: "Webhook secret inválido" });
+  // }
+  console.log("⚠️  [AUTH] Validación de secret DESACTIVADA (modo debug)");
 
   const payload = req.body;
 
   // ─── DEBUG TEMPORAL ────────────────────────────────────────────────────────
+  console.log("\n=== DEBUG: HEADERS RECIBIDOS ===");
+  console.log(JSON.stringify(req.headers, null, 2));
   console.log("\n=== DEBUG: PAYLOAD COMPLETO ===");
   console.log(JSON.stringify(payload, null, 2));
   console.log("=== FIN DEBUG ===\n");
@@ -279,87 +281,17 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log(`   Descripción  : ${payload.description ? payload.description.slice(0, 80) + "..." : "(vacía)"}`);
   console.log("------------------------------------------------------------");
 
-  // 3. Validar payload
-  const errors = validatePayload(payload);
-  if (errors.length > 0) {
-    console.error("❌ [VALIDACIÓN] Campos inválidos o faltantes:");
-    errors.forEach(e => console.error(`   • ${e}`));
-    return res.status(422).json({ ok: false, errors });
-  }
-  console.log("✅ [VALIDACIÓN] Todos los campos obligatorios son correctos");
+  // ⚠️ VALIDACIÓN DESACTIVADA TEMPORALMENTE PARA DEBUG
+  // const errors = validatePayload(payload);
+  // if (errors.length > 0) {
+  //   console.error("❌ [VALIDACIÓN] Campos inválidos o faltantes:");
+  //   errors.forEach(e => console.error(`   • ${e}`));
+  //   return res.status(422).json({ ok: false, errors });
+  // }
+  console.log("⚠️  [VALIDACIÓN] Desactivada (modo debug) — respondiendo 200 a Botmaker");
 
-  try {
-    console.log("\n------------------------------------------------------------");
-    console.log("🔄 [3/6] ENVIANDO DATOS A DYNAMICS 365...");
-    console.log(`   CRM URL : ${CRM_BASE_URL}`);
-
-    const token = await getCrmToken();
-    console.log("✅ [TOKEN] Autenticación con Azure AD exitosa");
-
-    console.log(`   Buscando Lead con email: ${payload.emailaddress1.trim()}`);
-    const existingLead = await findLeadByEmail(payload.emailaddress1.trim(), token);
-
-    let leadId, leadAction;
-
-    if (existingLead) {
-      console.log(`   ⚠️  Lead YA EXISTE en CRM (ID: ${existingLead.leadid})`);
-      console.log("   → Se actualizarán solo los campos vacíos (no se duplicará)");
-      leadId = existingLead.leadid;
-      const updateBody = buildLeadBody(payload, existingLead);
-      console.log("   Campos a actualizar:", Object.keys(updateBody).join(", "));
-      await updateLead(leadId, updateBody, token);
-      leadAction = "updated";
-    } else {
-      console.log("   Lead NO encontrado → se creará uno nuevo");
-      const createBody = buildLeadBody(payload);
-      console.log("   Campos a enviar:", Object.keys(createBody).join(", "));
-      leadId = await createLead(createBody, token);
-      leadAction = "created";
-    }
-
-    console.log("   Creando registro Origen del cliente potencial...");
-    const origenBody = buildOrigenBody(payload, leadId);
-    const origenId = await createOrigen(origenBody, token);
-
-    console.log("\n------------------------------------------------------------");
-    console.log("📥 [4/6] DATOS RECIBIDOS Y GUARDADOS EN DYNAMICS 365:");
-    console.log(`   Lead ID     : ${leadId}`);
-    console.log(`   Acción Lead : ${leadAction === "created" ? "✅ CREADO" : "🔄 ACTUALIZADO"}`);
-    console.log(`   Origen ID   : ${origenId}`);
-    console.log("------------------------------------------------------------");
-
-    console.log("\n------------------------------------------------------------");
-    console.log("🔍 [5/6] VALIDACIÓN FINAL:");
-    console.log(`   ✅ Lead ${leadAction === "created" ? "creado" : "actualizado"} correctamente`);
-    console.log(`   ✅ Origen del cliente potencial registrado`);
-    console.log(`   ✅ UTMs guardados: ${[
-      payload.new_utm_source,
-      payload.new_utm_medium,
-      payload.new_utm_campaign
-    ].filter(Boolean).join(" | ") || "ninguno"}`);
-    console.log("------------------------------------------------------------");
-
-    console.log("\n============================================================");
-    console.log("🎉 [6/6] PROCESO COMPLETADO EXITOSAMENTE");
-    console.log(`   Lead ${leadAction === "created" ? "creado" : "actualizado"}: ${leadId}`);
-    console.log(`   Origen creado : ${origenId}`);
-    console.log("============================================================\n");
-
-    return res.status(200).json({
-      ok: true,
-      lead_action: leadAction,
-      leadid: leadId,
-      origen_id: origenId,
-    });
-
-  } catch (err) {
-    const detail = err.response?.data ?? err.message;
-    console.error("\n============================================================");
-    console.error("💥 [ERROR] Fallo al comunicarse con Dynamics 365:");
-    console.error("   ", JSON.stringify(detail, null, 2));
-    console.error("============================================================\n");
-    return res.status(502).json({ ok: false, error: "Error al comunicarse con el CRM", detail });
-  }
+  // Respondemos 200 inmediatamente para que Botmaker no reintente
+  return res.status(200).json({ ok: true, debug: true });
 });
 
 // ─── Health check ────────────────────────────────────────────────────────────
