@@ -7,7 +7,8 @@
  *  2. Valida campos obligatorios y formatos
  *  3. Busca si el Lead ya existe en CRM por email
  *  4. Crea o actualiza el Lead según las reglas de negocio
- *  5. Crea siempre un registro "Origen del cliente potencial"
+ *  5. Crea registro Interés del contacto (área)
+ *  6. Crea registro Relación cliente carrera (programa)
  */
 
 require("dotenv").config();
@@ -59,6 +60,7 @@ function crmHeaders(token) {
   };
 }
 
+// ─── Validaciones ────────────────────────────────────────────────────────────
 function validatePayload(body) {
   const errors = [];
   if (!body.firstname?.trim())       errors.push("firstname es obligatorio");
@@ -94,6 +96,7 @@ function validatePayload(body) {
   return errors;
 }
 
+// ─── Buscar Lead por email ───────────────────────────────────────────────────
 async function findLeadByEmail(email, token) {
   const url =
     `${CRM_BASE_URL}/leads` +
@@ -104,6 +107,7 @@ async function findLeadByEmail(email, token) {
   return data.value?.[0] ?? null;
 }
 
+// ─── Construir body del Lead ─────────────────────────────────────────────────
 function buildLeadBody(payload, existing = null) {
   const body = {
     firstname: payload.firstname.trim(),
@@ -117,7 +121,6 @@ function buildLeadBody(payload, existing = null) {
       body.mobilephone = cleaned;
     }
   }
-
   if (payload.new_interesadoposgrado !== undefined) {
     body.new_interesadoposgrado = payload.new_interesadoposgrado;
   }
@@ -127,16 +130,6 @@ function buildLeadBody(payload, existing = null) {
   if (payload.businessunit) {
     body.businessunit = payload.businessunit;
   }
-
-  // ⚠️ Lookups pendientes de verificar nombres reales en Dynamics
-  // Se actualizarán cuando se confirmen los nombres de campo correctos
-  // if (payload.new_areadeinteresid && !existing) {
-  //   body["new_areadeinteresid@odata.bind"] = `/new_intereses(${payload.new_areadeinteresid})`;
-  // }
-  // if (payload.new_programadeinteresid && !existing) {
-  //   body["new_programadeinteresid@odata.bind"] = `/new_carreras(${payload.new_programadeinteresid})`;
-  // }
-
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
     body["ownerid@odata.bind"] = `/${entity}(${payload.ownerid})`;
@@ -144,53 +137,37 @@ function buildLeadBody(payload, existing = null) {
   return body;
 }
 
-function buildOrigenBody(payload, leadId) {
-  const nombreCompleto = `${payload.firstname.trim()} ${payload.lastname.trim()}`;
-  const tema = payload.new_tema || `Nueva Consulta - BOT - ${nombreCompleto}`;
-
-  const consulta = payload.description
-    ? payload.description.length > 2000
-      ? payload.description.slice(-2000)
-      : payload.description
-    : undefined;
-
+// ─── Construir body del Interés del contacto (área) ─────────────────────────
+function buildInteresBody(payload, leadId) {
   const body = {
-    new_tema: tema,
-    "regardingobjectid_lead@odata.bind": `/leads(${leadId})`,
+    "new_clientepotencial@odata.bind": `/leads(${leadId})`,
   };
-
-  if (consulta)                    body.description = consulta;
-  if (payload.new_origencandidato) body.new_origencandidato = payload.new_origencandidato;
-
-  // ⚠️ Lookups pendientes de verificar nombres reales en Dynamics
-  // if (payload.new_areadeinteresid) {
-  //   body["new_areadeinteresid@odata.bind"] = `/new_intereses(${payload.new_areadeinteresid})`;
-  // }
-  // if (payload.new_programadeinteresid) {
-  //   body["new_relacionclientecarrera@odata.bind"] = `/new_carreras(${payload.new_programadeinteresid})`;
-  // }
-
+  if (payload.new_areadeinteresid) {
+    body["new_interes@odata.bind"] = `/new_intereses(${payload.new_areadeinteresid})`;
+  }
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
     body["ownerid@odata.bind"] = `/${entity}(${payload.ownerid})`;
   }
-  if (payload.new_campanaid) {
-    body["new_campanaid@odata.bind"] = `/campaigns(${payload.new_campanaid})`;
-  }
-  if (payload.new_actdecampanaid) {
-    body["new_actdecampanaid@odata.bind"] = `/campaignactivities(${payload.new_actdecampanaid})`;
-  }
+  return body;
+}
 
-  const utmFields = [
-    "new_utm_source", "new_utm_term", "new_utm_medium", "new_googleclickid",
-    "new_utm_content", "new_campaignid", "new_utm_campaign", "new_sourceid",
-  ];
-  for (const field of utmFields) {
-    if (payload[field]) body[field] = payload[field];
+// ─── Construir body de Relación cliente carrera (programa) ──────────────────
+function buildRelacionCarreraBody(payload, leadId) {
+  const body = {
+    "new_clientepotencial@odata.bind": `/leads(${leadId})`,
+  };
+  if (payload.new_programadeinteresid) {
+    body["new_carrera@odata.bind"] = `/new_carreras(${payload.new_programadeinteresid})`;
+  }
+  if (payload.ownerid) {
+    const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
+    body["ownerid@odata.bind"] = `/${entity}(${payload.ownerid})`;
   }
   return body;
 }
 
+// ─── Operaciones CRM ─────────────────────────────────────────────────────────
 async function createLead(body, token) {
   const { data, headers } = await axios.post(`${CRM_BASE_URL}/leads`, body, {
     headers: crmHeaders(token),
@@ -204,15 +181,25 @@ async function updateLead(leadId, body, token) {
   });
 }
 
-async function createOrigen(body, token) {
+async function createInteresDelContacto(body, token) {
   const { data } = await axios.post(
-    `${CRM_BASE_URL}/new_origens`,
+    `${CRM_BASE_URL}/new_interesdelcontactos`,
     body,
     { headers: crmHeaders(token) }
   );
-  return data?.new_origenclientepotencialid;
+  return data?.new_interesdelcontactoid;
 }
 
+async function createRelacionCarrera(body, token) {
+  const { data } = await axios.post(
+    `${CRM_BASE_URL}/new_relacionclientecarreras`,
+    body,
+    { headers: crmHeaders(token) }
+  );
+  return data?.new_relacionclientecarreraid;
+}
+
+// ─── Webhook principal ───────────────────────────────────────────────────────
 app.post("/webhook/botmaker", async (req, res) => {
   console.log("\n============================================================");
   console.log("📨 [1/6] CONEXIÓN RECIBIDA DESDE BOTMAKER");
@@ -279,21 +266,27 @@ app.post("/webhook/botmaker", async (req, res) => {
       leadAction = "created";
     }
 
-    console.log("   Creando registro Origen del cliente potencial...");
-    const origenBody = buildOrigenBody(payload, leadId);
-    const origenId = await createOrigen(origenBody, token);
+    console.log("   Creando registro Interés del contacto...");
+    const interesBody = buildInteresBody(payload, leadId);
+    const interesId = await createInteresDelContacto(interesBody, token);
+
+    console.log("   Creando registro Relación cliente carrera...");
+    const relacionBody = buildRelacionCarreraBody(payload, leadId);
+    const relacionId = await createRelacionCarrera(relacionBody, token);
 
     console.log("\n------------------------------------------------------------");
     console.log("📥 [4/6] DATOS RECIBIDOS Y GUARDADOS EN DYNAMICS 365:");
     console.log(`   Lead ID     : ${leadId}`);
     console.log(`   Acción Lead : ${leadAction === "created" ? "✅ CREADO" : "🔄 ACTUALIZADO"}`);
-    console.log(`   Origen ID   : ${origenId}`);
+    console.log(`   Interés ID  : ${interesId}`);
+    console.log(`   Relación ID : ${relacionId}`);
     console.log("------------------------------------------------------------");
 
     console.log("\n------------------------------------------------------------");
     console.log("🔍 [5/6] VALIDACIÓN FINAL:");
     console.log(`   ✅ Lead ${leadAction === "created" ? "creado" : "actualizado"} correctamente`);
-    console.log(`   ✅ Origen del cliente potencial registrado`);
+    console.log(`   ✅ Interés del contacto registrado`);
+    console.log(`   ✅ Relación cliente carrera registrada`);
     console.log(`   ✅ UTMs guardados: ${[
       payload.new_utm_source,
       payload.new_utm_medium,
@@ -304,14 +297,16 @@ app.post("/webhook/botmaker", async (req, res) => {
     console.log("\n============================================================");
     console.log("🎉 [6/6] PROCESO COMPLETADO EXITOSAMENTE");
     console.log(`   Lead ${leadAction === "created" ? "creado" : "actualizado"}: ${leadId}`);
-    console.log(`   Origen creado : ${origenId}`);
+    console.log(`   Interés creado  : ${interesId}`);
+    console.log(`   Relación creada : ${relacionId}`);
     console.log("============================================================\n");
 
     return res.status(200).json({
       ok: true,
       lead_action: leadAction,
       leadid: leadId,
-      origen_id: origenId,
+      interes_id: interesId,
+      relacion_id: relacionId,
     });
 
   } catch (err) {
@@ -324,6 +319,8 @@ app.post("/webhook/botmaker", async (req, res) => {
   }
 });
 
+// ─── Health check ────────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
+// ─── Start ───────────────────────────────────────────────────────────────────
 app.listen(PORT, () => console.log(`Botmaker→CRM bridge corriendo en puerto ${PORT}`));
