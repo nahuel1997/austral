@@ -234,31 +234,30 @@ app.post("/webhook/botmaker", async (req, res) => {
   }
   console.log("✅ [AUTH] OK");
 
-  // ─── DEBUG ────────────────────────────────────────────────────────────────
-  console.log("\n=== PAYLOAD RAW DE BOTMAKER ===");
+  // ─── DEBUG: loguear todo ──────────────────────────────────────────────────
+  console.log(`📌 Tipo de evento: ${req.body.type}`);
+  console.log("\n=== PAYLOAD RAW ===");
   console.log(JSON.stringify(req.body, null, 2));
   console.log("=== FIN PAYLOAD RAW ===\n");
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Solo procesar eventos de cierre de conversación
-  if (req.body.type && req.body.type !== "conversation_closed") {
-    console.log(`⏭️  Evento '${req.body.type}' ignorado — solo procesamos cierre de conversación`);
-    return res.status(200).json({ ok: true, skipped: true });
-  }
-
   const payload = mapBotmakerPayload(req.body);
 
-  console.log("\n------------------------------------------------------------");
   console.log("📋 DATOS MAPEADOS:");
-  console.log(`   Nombre       : ${payload.firstname} ${payload.lastname}`);
-  console.log(`   Email        : ${payload.emailaddress1}`);
-  console.log(`   Teléfono     : ${payload.mobilephone ?? "(no enviado)"}`);
-  console.log(`   Canal        : ${payload.canal}`);
-  console.log(`   Área ID      : ${payload.new_areadeinteresid ?? "(no enviado)"}`);
-  console.log(`   Programa ID  : ${payload.new_programadeinteresid ?? "(no enviado)"}`);
-  console.log(`   UTM Source   : ${payload.new_utm_source ?? "-"}`);
-  console.log(`   Descripción  : ${payload.description ? payload.description.slice(0, 80) + "..." : "(vacía)"}`);
-  console.log("------------------------------------------------------------");
+  console.log(`   Nombre    : ${payload.firstname} ${payload.lastname}`);
+  console.log(`   Email     : ${payload.emailaddress1}`);
+  console.log(`   Teléfono  : ${payload.mobilephone ?? "(no enviado)"}`);
+  console.log(`   Canal     : ${payload.canal}`);
+  console.log(`   Área ID   : ${payload.new_areadeinteresid ?? "(no enviado)"}`);
+  console.log(`   Programa  : ${payload.new_programadeinteresid ?? "(no enviado)"}`);
+  console.log(`   Variables : ${JSON.stringify(req.body.variables || {})}`);
+
+  // Si no hay variables útiles, ignorar silenciosamente
+  const vars = req.body.variables || {};
+  if (!vars["Nombre"] && !vars["Mail"] && !vars["Email"]) {
+    console.log("⏭️  Sin variables del bot — evento ignorado");
+    return res.status(200).json({ ok: true, skipped: true });
+  }
 
   const errors = validatePayload(payload);
   if (errors.length > 0) {
