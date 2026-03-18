@@ -225,6 +225,11 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log(`   IP origen  : ${req.ip}`);
   console.log("============================================================");
 
+  // ─── DEBUG TOKEN ──────────────────────────────────────────────────────────
+  console.log(`🔑 Token recibido : ${req.headers["auth-bm-token"] ?? "(no viene)"}`);
+  console.log(`🔑 Token esperado : ${WEBHOOK_SECRET}`);
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Auth con header auth-bm-token de Botmaker
   if (WEBHOOK_SECRET && req.headers["auth-bm-token"]) {
     if (req.headers["auth-bm-token"] !== WEBHOOK_SECRET) {
@@ -234,7 +239,7 @@ app.post("/webhook/botmaker", async (req, res) => {
   }
   console.log("✅ [AUTH] OK");
 
-  // ─── DEBUG: loguear todo ──────────────────────────────────────────────────
+  // ─── DEBUG PAYLOAD ────────────────────────────────────────────────────────
   console.log(`📌 Tipo de evento: ${req.body.type}`);
   console.log("\n=== PAYLOAD RAW ===");
   console.log(JSON.stringify(req.body, null, 2));
