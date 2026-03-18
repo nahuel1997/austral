@@ -206,7 +206,7 @@ async function updateLead(leadId, body, token) {
 
 async function createOrigen(body, token) {
   const { data } = await axios.post(
-    `${CRM_BASE_URL}/new_origenclientepotenciales`,
+    `${CRM_BASE_URL}/new_origens`,
     body,
     { headers: crmHeaders(token) }
   );
