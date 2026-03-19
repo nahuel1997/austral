@@ -23,7 +23,7 @@ const {
 // ─── Acumulador de sesiones ───────────────────────────────────────────────────
 const sessions = new Map();
 const SESSION_TTL = 30 * 60 * 1000;  // 30 minutos
-const PROCESS_DELAY = 15 * 3000;     // 15 segundos de espera antes de procesar
+const PROCESS_DELAY = 15 * 1000;     // 15 segundos de espera antes de procesar
 
 function getOrCreateSession(sessionId, body) {
   if (!sessions.has(sessionId)) {
