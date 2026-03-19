@@ -20,6 +20,47 @@ const {
   PORT = 3000,
 } = process.env;
 
+// ─── Acumulador de sesiones ───────────────────────────────────────────────────
+// sessionId → { vars, meta, timer }
+const sessions = new Map();
+const SESSION_TTL = 30 * 60 * 1000; // 30 minutos
+
+function getOrCreateSession(sessionId, body) {
+  if (!sessions.has(sessionId)) {
+    sessions.set(sessionId, {
+      vars: {},
+      meta: {
+        chatPlatform: body.chatPlatform,
+        contactId: body.contactId,
+        customerId: body.customerId,
+        sessionId,
+      },
+      timer: null,
+    });
+  }
+  return sessions.get(sessionId);
+}
+
+function scheduleSessionCleanup(sessionId) {
+  const session = sessions.get(sessionId);
+  if (!session) return;
+  if (session.timer) clearTimeout(session.timer);
+  session.timer = setTimeout(() => {
+    console.log(`🧹 Sesión expirada y eliminada: ${sessionId}`);
+    sessions.delete(sessionId);
+  }, SESSION_TTL);
+}
+
+// Campos obligatorios para procesar
+const REQUIRED_VARS_WEB = ["Nombre", "Apellido", "Mail", "Telefono"];
+const REQUIRED_VARS_WA  = ["Nombre", "Apellido", "Mail"];
+
+function hasRequiredVars(vars, platform) {
+  const required = platform === "whatsapp" ? REQUIRED_VARS_WA : REQUIRED_VARS_WEB;
+  return required.every(k => vars[k]?.trim());
+}
+
+// ─── Cache del token CRM ─────────────────────────────────────────────────────
 let crmTokenCache = { token: null, expiresAt: 0 };
 
 async function getCrmToken() {
@@ -52,33 +93,29 @@ function crmHeaders(token) {
   };
 }
 
-// ─── Mapear payload de Botmaker al formato interno ───────────────────────────
-function mapBotmakerPayload(body) {
-  const vars = body.variables || {};
-  const canal = body.chatPlatform === "whatsapp" ? "WhatsApp" : "Web";
-
-  const telefono = canal === "WhatsApp"
-    ? body.contactId
-    : vars["Telefono"] || vars["Teléfono"] || null;
+// ─── Mapear variables acumuladas al formato interno ──────────────────────────
+function mapVarsToPayload(vars, meta) {
+  const canal = meta.chatPlatform === "whatsapp" ? "WhatsApp" : "Web";
+  const telefono = canal === "WhatsApp" ? meta.contactId : vars["Telefono"] || null;
 
   return {
-    firstname:               vars["Nombre"]              || null,
-    lastname:                vars["Apellido"]            || null,
-    emailaddress1:           vars["Mail"]                || vars["Email"] || null,
+    firstname:               vars["Nombre"]             || null,
+    lastname:                vars["Apellido"]           || null,
+    emailaddress1:           vars["Mail"]               || vars["Email"] || null,
     mobilephone:             telefono,
     canal,
-    new_areadeinteresid:     vars["Area ID"]             || vars["AreaID"] || null,
-    new_programadeinteresid: vars["Programa ID"]         || vars["ProgramaID"] || vars["Programa Seleccionado"] || null,
-    new_utm_source:          vars["utm_source"]          || null,
-    new_utm_medium:          vars["utm_medium"]          || null,
-    new_utm_campaign:        vars["utm_campaign"]        || null,
-    new_utm_term:            vars["utm_term"]            || null,
-    new_utm_content:         vars["utm_content"]         || null,
-    new_googleclickid:       vars["gclid"]               || null,
-    new_sourceid:            vars["source_id"]           || null,
-    new_campaignid:          vars["campaign_id"]         || null,
-    new_origencandidato:     vars["origen_candidato"]    || null,
-    description:             vars["Consulta"]            || vars["descripcion"] || null,
+    new_areadeinteresid:     vars["Area ID"]            || vars["AreaID"] || null,
+    new_programadeinteresid: vars["Programa ID"]        || vars["ProgramaID"] || vars["Programa Seleccionado"] || null,
+    new_utm_source:          vars["utm_source"]         || null,
+    new_utm_medium:          vars["utm_medium"]         || null,
+    new_utm_campaign:        vars["utm_campaign"]       || null,
+    new_utm_term:            vars["utm_term"]           || null,
+    new_utm_content:         vars["utm_content"]        || null,
+    new_googleclickid:       vars["gclid"]              || null,
+    new_sourceid:            vars["source_id"]          || null,
+    new_campaignid:          vars["campaign_id"]        || null,
+    new_origencandidato:     vars["origen_candidato"]   || null,
+    description:             vars["Consulta"]           || null,
   };
 }
 
@@ -90,7 +127,6 @@ function validatePayload(body) {
   if (!body.emailaddress1?.trim())    errors.push("emailaddress1 es obligatorio");
   if (!body.new_areadeinteresid)      errors.push("new_areadeinteresid es obligatorio");
   if (!body.new_programadeinteresid)  errors.push("new_programadeinteresid es obligatorio");
-
   if (body.canal === "Web" && !body.mobilephone) {
     errors.push("mobilephone es obligatorio en canal Web");
   }
@@ -138,16 +174,9 @@ function buildLeadBody(payload, existing = null) {
   };
   if (payload.mobilephone) {
     const cleaned = payload.mobilephone.replace(/[\s\-()]/g, "");
-    if (!existing || !existing.mobilephone) {
-      body.mobilephone = cleaned;
-    }
+    if (!existing || !existing.mobilephone) body.mobilephone = cleaned;
   }
-  if (payload.new_interesadoposgrado !== undefined) {
-    body.new_interesadoposgrado = payload.new_interesadoposgrado;
-  }
-  if (payload.new_origencandidato) {
-    body.new_origencandidato = payload.new_origencandidato;
-  }
+  if (payload.new_origencandidato) body.new_origencandidato = payload.new_origencandidato;
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
     body["ownerid@odata.bind"] = `/${entity}(${payload.ownerid})`;
@@ -157,30 +186,18 @@ function buildLeadBody(payload, existing = null) {
 
 // ─── Construir body del Interés del contacto (área) ─────────────────────────
 function buildInteresBody(payload, leadId) {
-  const body = {
-    "new_clientepotencial@odata.bind": `/leads(${leadId})`,
-  };
+  const body = { "new_clientepotencial@odata.bind": `/leads(${leadId})` };
   if (payload.new_areadeinteresid) {
     body["new_interes@odata.bind"] = `/new_intereses(${payload.new_areadeinteresid})`;
-  }
-  if (payload.ownerid) {
-    const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
-    body["ownerid@odata.bind"] = `/${entity}(${payload.ownerid})`;
   }
   return body;
 }
 
 // ─── Construir body de Relación cliente carrera (programa) ──────────────────
 function buildRelacionCarreraBody(payload, leadId) {
-  const body = {
-    "new_clientepotencial@odata.bind": `/leads(${leadId})`,
-  };
+  const body = { "new_clientepotencial@odata.bind": `/leads(${leadId})` };
   if (payload.new_programadeinteresid) {
     body["new_carrera@odata.bind"] = `/new_carreras(${payload.new_programadeinteresid})`;
-  }
-  if (payload.ownerid) {
-    const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
-    body["ownerid@odata.bind"] = `/${entity}(${payload.ownerid})`;
   }
   return body;
 }
@@ -201,100 +218,110 @@ async function updateLead(leadId, body, token) {
 
 async function createInteresDelContacto(body, token) {
   const { data } = await axios.post(
-    `${CRM_BASE_URL}/new_interesdelcontactos`,
-    body,
-    { headers: crmHeaders(token) }
+    `${CRM_BASE_URL}/new_interesdelcontactos`, body, { headers: crmHeaders(token) }
   );
   return data?.new_interesdelcontactoid;
 }
 
 async function createRelacionCarrera(body, token) {
   const { data } = await axios.post(
-    `${CRM_BASE_URL}/new_relacionclientecarreras`,
-    body,
-    { headers: crmHeaders(token) }
+    `${CRM_BASE_URL}/new_relacionclientecarreras`, body, { headers: crmHeaders(token) }
   );
   return data?.new_relacionclientecarreraid;
+}
+
+// ─── Procesar Lead en CRM ────────────────────────────────────────────────────
+async function processLead(payload) {
+  const token = await getCrmToken();
+  const existingLead = await findLeadByEmail(payload.emailaddress1.trim(), token);
+  let leadId, leadAction;
+
+  if (existingLead) {
+    console.log(`   ⚠️  Lead YA EXISTE (ID: ${existingLead.leadid}) → actualizando`);
+    leadId = existingLead.leadid;
+    await updateLead(leadId, buildLeadBody(payload, existingLead), token);
+    leadAction = "updated";
+  } else {
+    console.log("   Lead NO encontrado → creando");
+    leadId = await createLead(buildLeadBody(payload), token);
+    leadAction = "created";
+  }
+
+  console.log("   Creando Interés del contacto...");
+  const interesId = await createInteresDelContacto(buildInteresBody(payload, leadId), token);
+
+  console.log("   Creando Relación cliente carrera...");
+  const relacionId = await createRelacionCarrera(buildRelacionCarreraBody(payload, leadId), token);
+
+  return { leadId, leadAction, interesId, relacionId };
 }
 
 // ─── Webhook principal ───────────────────────────────────────────────────────
 app.post("/webhook/botmaker", async (req, res) => {
   console.log("\n============================================================");
-  console.log("📨 CONEXIÓN RECIBIDA DESDE BOTMAKER");
+  console.log("📨 MENSAJE RECIBIDO DE BOTMAKER");
   console.log(`   Fecha/Hora : ${new Date().toLocaleString("es-AR")}`);
-  console.log(`   IP origen  : ${req.ip}`);
   console.log("============================================================");
 
-  // ─── DEBUG TOKEN ──────────────────────────────────────────────────────────
-  console.log(`🔑 Token recibido : ${req.headers["auth-bm-token"] ?? "(no viene)"}`);
-  console.log(`🔑 Token esperado : ${WEBHOOK_SECRET}`);
-  // ─────────────────────────────────────────────────────────────────────────
-
-  // Auth con header auth-bm-token de Botmaker
+  // Auth
   if (WEBHOOK_SECRET && req.headers["auth-bm-token"]) {
     if (req.headers["auth-bm-token"] !== WEBHOOK_SECRET) {
       console.error("❌ [AUTH] Token inválido");
       return res.status(401).json({ ok: false, error: "Token inválido" });
     }
   }
-  console.log("✅ [AUTH] OK");
 
-  // ─── DEBUG PAYLOAD ────────────────────────────────────────────────────────
-  console.log(`📌 Tipo de evento: ${req.body.type}`);
-  console.log("\n=== PAYLOAD RAW ===");
-  console.log(JSON.stringify(req.body, null, 2));
-  console.log("=== FIN PAYLOAD RAW ===\n");
-  // ─────────────────────────────────────────────────────────────────────────
+  const body = req.body;
+  const sessionId = body.sessionId;
+  const newVars = body.variables || {};
 
-  const payload = mapBotmakerPayload(req.body);
+  // Si no hay sessionId ignorar
+  if (!sessionId) {
+    return res.status(200).json({ ok: true, skipped: true, reason: "sin sessionId" });
+  }
 
-  console.log("📋 DATOS MAPEADOS:");
+  // Acumular variables de la sesión
+  const session = getOrCreateSession(sessionId, body);
+  Object.assign(session.vars, newVars);
+  scheduleSessionCleanup(sessionId);
+
+  console.log(`📌 Sesión: ${sessionId}`);
+  console.log(`   Variables acumuladas: ${JSON.stringify(session.vars)}`);
+
+  // Verificar si ya tenemos las variables mínimas necesarias
+  if (!hasRequiredVars(session.vars, body.chatPlatform)) {
+    console.log("⏳ Variables incompletas — esperando más mensajes");
+    return res.status(200).json({ ok: true, skipped: true, reason: "variables incompletas", vars: session.vars });
+  }
+
+  // Si ya procesamos esta sesión, no volver a procesar
+  if (session.processed) {
+    console.log("✅ Sesión ya procesada — ignorando");
+    return res.status(200).json({ ok: true, skipped: true, reason: "ya procesado" });
+  }
+
+  // Marcar como procesada
+  session.processed = true;
+
+  const payload = mapVarsToPayload(session.vars, session.meta);
+
+  console.log("\n📋 DATOS COMPLETOS PARA CRM:");
   console.log(`   Nombre    : ${payload.firstname} ${payload.lastname}`);
   console.log(`   Email     : ${payload.emailaddress1}`);
   console.log(`   Teléfono  : ${payload.mobilephone ?? "(no enviado)"}`);
   console.log(`   Canal     : ${payload.canal}`);
   console.log(`   Área ID   : ${payload.new_areadeinteresid ?? "(no enviado)"}`);
   console.log(`   Programa  : ${payload.new_programadeinteresid ?? "(no enviado)"}`);
-  console.log(`   Variables : ${JSON.stringify(req.body.variables || {})}`);
-
-  // Si no hay variables útiles, ignorar silenciosamente
-  const vars = req.body.variables || {};
-  if (!vars["Nombre"] && !vars["Mail"] && !vars["Email"]) {
-    console.log("⏭️  Sin variables del bot — evento ignorado");
-    return res.status(200).json({ ok: true, skipped: true });
-  }
 
   const errors = validatePayload(payload);
   if (errors.length > 0) {
-    console.error("❌ [VALIDACIÓN] Campos inválidos o faltantes:");
-    errors.forEach(e => console.error(`   • ${e}`));
+    session.processed = false; // permitir reintento
+    console.error("❌ [VALIDACIÓN]:", errors);
     return res.status(422).json({ ok: false, errors });
   }
-  console.log("✅ [VALIDACIÓN] OK");
 
   try {
-    const token = await getCrmToken();
-    console.log("✅ [TOKEN] Azure AD OK");
-
-    const existingLead = await findLeadByEmail(payload.emailaddress1.trim(), token);
-    let leadId, leadAction;
-
-    if (existingLead) {
-      console.log(`   ⚠️  Lead YA EXISTE (ID: ${existingLead.leadid}) → actualizando`);
-      leadId = existingLead.leadid;
-      await updateLead(leadId, buildLeadBody(payload, existingLead), token);
-      leadAction = "updated";
-    } else {
-      console.log("   Lead NO encontrado → creando");
-      leadId = await createLead(buildLeadBody(payload), token);
-      leadAction = "created";
-    }
-
-    console.log("   Creando Interés del contacto...");
-    const interesId = await createInteresDelContacto(buildInteresBody(payload, leadId), token);
-
-    console.log("   Creando Relación cliente carrera...");
-    const relacionId = await createRelacionCarrera(buildRelacionCarreraBody(payload, leadId), token);
+    const { leadId, leadAction, interesId, relacionId } = await processLead(payload);
 
     console.log("\n============================================================");
     console.log("🎉 PROCESO COMPLETADO");
@@ -312,17 +339,18 @@ app.post("/webhook/botmaker", async (req, res) => {
     });
 
   } catch (err) {
+    session.processed = false; // permitir reintento
     const detail = err.response?.data ?? err.message;
-    console.error("\n============================================================");
-    console.error("💥 [ERROR] Fallo al comunicarse con Dynamics 365:");
-    console.error("   ", JSON.stringify(detail, null, 2));
-    console.error("============================================================\n");
+    console.error("💥 [ERROR CRM]:", JSON.stringify(detail, null, 2));
     return res.status(502).json({ ok: false, error: "Error al comunicarse con el CRM", detail });
   }
 });
 
 // ─── Health check ────────────────────────────────────────────────────────────
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
+app.get("/health", (_req, res) => res.json({
+  status: "ok",
+  sessions: sessions.size,
+}));
 
 // ─── Start ───────────────────────────────────────────────────────────────────
 app.listen(PORT, () => console.log(`Botmaker→CRM bridge corriendo en puerto ${PORT}`));
