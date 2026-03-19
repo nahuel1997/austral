@@ -51,7 +51,6 @@ function scheduleSessionCleanup(sessionId) {
   }, SESSION_TTL);
 }
 
-// Variables mínimas para disparar el proceso
 const REQUIRED_VARS = ["Nombre", "Mail"];
 
 function hasRequiredVars(vars) {
@@ -122,11 +121,8 @@ function mapVarsToPayload(vars, meta) {
 // ─── Validaciones ────────────────────────────────────────────────────────────
 function validatePayload(body) {
   const errors = [];
-
-  // Solo bloqueamos si firstname o email vienen con formato incorrecto
   if (!body.firstname?.trim()) errors.push("firstname es obligatorio");
   if (!body.emailaddress1?.trim()) errors.push("emailaddress1 es obligatorio");
-
   if (body.firstname && (
     body.firstname.trim().length < 3 ||
     !/^[A-Za-záéíóúÁÉÍÓÚüÜñÑ\s'-]+$/.test(body.firstname.trim())
@@ -168,12 +164,9 @@ function buildLeadBody(payload, existing = null) {
     firstname: payload.firstname.trim(),
     emailaddress1: payload.emailaddress1.trim(),
   };
-
-  // Apellido solo si viene
   if (payload.lastname?.trim()) {
     body.lastname = payload.lastname.trim();
   }
-
   if (payload.mobilephone) {
     const cleaned = payload.mobilephone.replace(/[\s\-()]/g, "");
     if (!existing || !existing.mobilephone) body.mobilephone = cleaned;
@@ -190,7 +183,9 @@ function buildLeadBody(payload, existing = null) {
 
 // ─── Construir body del Interés del contacto (área) ─────────────────────────
 function buildInteresBody(payload, leadId) {
-  const body = { "new_clientepotencial@odata.bind": `/leads(${leadId})` };
+  const body = {
+    "new_ClientePotencial@odata.bind": `/leads(${leadId})`,  // C mayúscula
+  };
   if (payload.new_areadeinteresid) {
     body["new_interes@odata.bind"] = `/new_intereses(${payload.new_areadeinteresid})`;
   }
@@ -203,7 +198,9 @@ function buildInteresBody(payload, leadId) {
 
 // ─── Construir body de Relación cliente carrera (programa) ──────────────────
 function buildRelacionCarreraBody(payload, leadId) {
-  const body = { "new_clientepotencial@odata.bind": `/leads(${leadId})` };
+  const body = {
+    "new_clientepotencial@odata.bind": `/leads(${leadId})`,  // todo minúscula
+  };
   if (payload.new_programadeinteresid) {
     body["new_carrera@odata.bind"] = `/new_carreras(${payload.new_programadeinteresid})`;
   }
@@ -273,7 +270,7 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log(`📌 Sesión  : ${sessionId}`);
   console.log(`   Vars    : ${JSON.stringify(session.vars)}`);
 
-  // Si ya fue procesada esta sesión no volver a procesar
+  // Si ya fue procesada no volver a procesar
   if (session.processed) {
     console.log("✅ Sesión ya procesada — ignorando");
     return res.status(200).json({ ok: true, skipped: true, reason: "ya procesado" });
