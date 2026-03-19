@@ -22,7 +22,8 @@ const {
 
 // ─── Acumulador de sesiones ───────────────────────────────────────────────────
 const sessions = new Map();
-const SESSION_TTL = 30 * 60 * 1000; // 30 minutos
+const SESSION_TTL = 30 * 60 * 1000;  // 30 minutos
+const PROCESS_DELAY = 15 * 1000;     // 15 segundos de espera antes de procesar
 
 function getOrCreateSession(sessionId, body) {
   if (!sessions.has(sessionId)) {
@@ -35,17 +36,18 @@ function getOrCreateSession(sessionId, body) {
         sessionId,
       },
       processed: false,
-      timer: null,
+      processTimer: null,
+      cleanupTimer: null,
     });
   }
   return sessions.get(sessionId);
 }
 
-function scheduleSessionCleanup(sessionId) {
+function scheduleCleanup(sessionId) {
   const session = sessions.get(sessionId);
   if (!session) return;
-  if (session.timer) clearTimeout(session.timer);
-  session.timer = setTimeout(() => {
+  if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
+  session.cleanupTimer = setTimeout(() => {
     console.log(`🧹 Sesión expirada: ${sessionId}`);
     sessions.delete(sessionId);
   }, SESSION_TTL);
@@ -164,16 +166,12 @@ function buildLeadBody(payload, existing = null) {
     firstname: payload.firstname.trim(),
     emailaddress1: payload.emailaddress1.trim(),
   };
-  if (payload.lastname?.trim()) {
-    body.lastname = payload.lastname.trim();
-  }
+  if (payload.lastname?.trim()) body.lastname = payload.lastname.trim();
   if (payload.mobilephone) {
     const cleaned = payload.mobilephone.replace(/[\s\-()]/g, "");
     if (!existing || !existing.mobilephone) body.mobilephone = cleaned;
   }
-  if (payload.new_origencandidato) {
-    body.new_origencandidato = payload.new_origencandidato;
-  }
+  if (payload.new_origencandidato) body.new_origencandidato = payload.new_origencandidato;
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
     body["ownerid@odata.bind"] = `/${entity}(${payload.ownerid})`;
@@ -184,7 +182,7 @@ function buildLeadBody(payload, existing = null) {
 // ─── Construir body del Interés del contacto (área) ─────────────────────────
 function buildInteresBody(payload, leadId) {
   const body = {
-    "new_ClientePotencial@odata.bind": `/leads(${leadId})`,  // C mayúscula
+    "new_ClientePotencial@odata.bind": `/leads(${leadId})`,
   };
   if (payload.new_areadeinteresid) {
     body["new_interes@odata.bind"] = `/new_intereses(${payload.new_areadeinteresid})`;
@@ -199,7 +197,7 @@ function buildInteresBody(payload, leadId) {
 // ─── Construir body de Relación cliente carrera (programa) ──────────────────
 function buildRelacionCarreraBody(payload, leadId) {
   const body = {
-    "new_clientepotencial@odata.bind": `/leads(${leadId})`,  // todo minúscula
+    "new_clientepotencial@odata.bind": `/leads(${leadId})`,
   };
   if (payload.new_programadeinteresid) {
     body["new_carrera@odata.bind"] = `/new_carreras(${payload.new_programadeinteresid})`;
@@ -239,6 +237,64 @@ async function createRelacionCarrera(body, token) {
   return data?.new_relacionclientecarreraid;
 }
 
+// ─── Procesar sesión en CRM ──────────────────────────────────────────────────
+async function processSession(sessionId) {
+  const session = sessions.get(sessionId);
+  if (!session || session.processed) return;
+
+  session.processed = true;
+  const payload = mapVarsToPayload(session.vars, session.meta);
+
+  console.log(`\n🚀 PROCESANDO SESIÓN: ${sessionId}`);
+  console.log(`   Variables finales: ${JSON.stringify(session.vars)}`);
+  console.log(`   Nombre    : ${payload.firstname} ${payload.lastname ?? "(sin apellido)"}`);
+  console.log(`   Email     : ${payload.emailaddress1}`);
+  console.log(`   Teléfono  : ${payload.mobilephone ?? "(no enviado)"}`);
+  console.log(`   Canal     : ${payload.canal}`);
+  console.log(`   Área ID   : ${payload.new_areadeinteresid ?? "(no enviado)"}`);
+  console.log(`   Programa  : ${payload.new_programadeinteresid ?? "(no enviado)"}`);
+  console.log(`   UTM Source: ${payload.new_utm_source ?? "-"}`);
+
+  const errors = validatePayload(payload);
+  if (errors.length > 0) {
+    session.processed = false;
+    console.error("❌ [VALIDACIÓN]:", errors);
+    return;
+  }
+
+  try {
+    const token = await getCrmToken();
+    const existingLead = await findLeadByEmail(payload.emailaddress1.trim(), token);
+    let leadId, leadAction;
+
+    if (existingLead) {
+      console.log(`   ⚠️  Lead YA EXISTE (ID: ${existingLead.leadid}) → actualizando`);
+      leadId = existingLead.leadid;
+      await updateLead(leadId, buildLeadBody(payload, existingLead), token);
+      leadAction = "updated";
+    } else {
+      console.log("   Lead NO encontrado → creando");
+      leadId = await createLead(buildLeadBody(payload), token);
+      leadAction = "created";
+    }
+
+    const interesId = await createInteresDelContacto(buildInteresBody(payload, leadId), token);
+    const relacionId = await createRelacionCarrera(buildRelacionCarreraBody(payload, leadId), token);
+
+    console.log("\n============================================================");
+    console.log("🎉 PROCESO COMPLETADO");
+    console.log(`   Lead ${leadAction === "created" ? "CREADO" : "ACTUALIZADO"}: ${leadId}`);
+    console.log(`   Interés  : ${interesId ?? "(no creado)"}`);
+    console.log(`   Relación : ${relacionId ?? "(no creado)"}`);
+    console.log("============================================================\n");
+
+  } catch (err) {
+    session.processed = false;
+    const detail = err.response?.data ?? err.message;
+    console.error("💥 [ERROR CRM]:", JSON.stringify(detail, null, 2));
+  }
+}
+
 // ─── Webhook principal ───────────────────────────────────────────────────────
 app.post("/webhook/botmaker", async (req, res) => {
   console.log("\n============================================================");
@@ -265,89 +321,36 @@ app.post("/webhook/botmaker", async (req, res) => {
   // Acumular variables
   const session = getOrCreateSession(sessionId, body);
   Object.assign(session.vars, newVars);
-  scheduleSessionCleanup(sessionId);
+  scheduleCleanup(sessionId);
 
   console.log(`📌 Sesión  : ${sessionId}`);
   console.log(`   Vars    : ${JSON.stringify(session.vars)}`);
 
-  // Si ya fue procesada no volver a procesar
+  // Si ya fue procesada no hacer nada
   if (session.processed) {
     console.log("✅ Sesión ya procesada — ignorando");
     return res.status(200).json({ ok: true, skipped: true, reason: "ya procesado" });
   }
 
-  // Esperar hasta tener Nombre y Mail como mínimo
+  // Si no tiene las variables mínimas seguir esperando
   if (!hasRequiredVars(session.vars)) {
     console.log("⏳ Esperando más variables...");
     return res.status(200).json({ ok: true, skipped: true, reason: "variables incompletas" });
   }
 
-  // Marcar como procesada
-  session.processed = true;
-
-  const payload = mapVarsToPayload(session.vars, session.meta);
-
-  console.log("\n📋 DATOS PARA CRM:");
-  console.log(`   Nombre    : ${payload.firstname} ${payload.lastname ?? "(sin apellido)"}`);
-  console.log(`   Email     : ${payload.emailaddress1}`);
-  console.log(`   Teléfono  : ${payload.mobilephone ?? "(no enviado)"}`);
-  console.log(`   Canal     : ${payload.canal}`);
-  console.log(`   Área ID   : ${payload.new_areadeinteresid ?? "(no enviado)"}`);
-  console.log(`   Programa  : ${payload.new_programadeinteresid ?? "(no enviado)"}`);
-
-  const errors = validatePayload(payload);
-  if (errors.length > 0) {
-    session.processed = false;
-    console.error("❌ [VALIDACIÓN]:", errors);
-    return res.status(422).json({ ok: false, errors });
+  // Tiene las variables mínimas — iniciar o reiniciar el timer de 15 segundos
+  if (session.processTimer) {
+    clearTimeout(session.processTimer);
+    console.log("⏱️  Timer reiniciado — esperando 15s para acumular más variables");
+  } else {
+    console.log("⏱️  Timer iniciado — procesando en 15s si no llegan más variables");
   }
-  console.log("✅ [VALIDACIÓN] OK");
 
-  try {
-    const token = await getCrmToken();
-    console.log("✅ [TOKEN] Azure AD OK");
+  session.processTimer = setTimeout(() => {
+    processSession(sessionId);
+  }, PROCESS_DELAY);
 
-    const existingLead = await findLeadByEmail(payload.emailaddress1.trim(), token);
-    let leadId, leadAction;
-
-    if (existingLead) {
-      console.log(`   ⚠️  Lead YA EXISTE (ID: ${existingLead.leadid}) → actualizando`);
-      leadId = existingLead.leadid;
-      await updateLead(leadId, buildLeadBody(payload, existingLead), token);
-      leadAction = "updated";
-    } else {
-      console.log("   Lead NO encontrado → creando");
-      leadId = await createLead(buildLeadBody(payload), token);
-      leadAction = "created";
-    }
-
-    console.log("   Creando Interés del contacto...");
-    const interesId = await createInteresDelContacto(buildInteresBody(payload, leadId), token);
-
-    console.log("   Creando Relación cliente carrera...");
-    const relacionId = await createRelacionCarrera(buildRelacionCarreraBody(payload, leadId), token);
-
-    console.log("\n============================================================");
-    console.log("🎉 PROCESO COMPLETADO");
-    console.log(`   Lead ${leadAction === "created" ? "CREADO" : "ACTUALIZADO"}: ${leadId}`);
-    console.log(`   Interés  : ${interesId ?? "(no creado)"}`);
-    console.log(`   Relación : ${relacionId ?? "(no creado)"}`);
-    console.log("============================================================\n");
-
-    return res.status(200).json({
-      ok: true,
-      lead_action: leadAction,
-      leadid: leadId,
-      interes_id: interesId,
-      relacion_id: relacionId,
-    });
-
-  } catch (err) {
-    session.processed = false;
-    const detail = err.response?.data ?? err.message;
-    console.error("💥 [ERROR CRM]:", JSON.stringify(detail, null, 2));
-    return res.status(502).json({ ok: false, error: "Error al comunicarse con el CRM", detail });
-  }
+  return res.status(200).json({ ok: true, queued: true, vars: session.vars });
 });
 
 // ─── Health check ────────────────────────────────────────────────────────────
