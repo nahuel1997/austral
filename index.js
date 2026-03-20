@@ -22,8 +22,8 @@ const {
 
 // ─── Acumulador de sesiones ───────────────────────────────────────────────────
 const sessions = new Map();
-const SESSION_TTL = 30 * 60 * 1000;  // 30 minutos
-const PROCESS_DELAY = 15 * 1000;     // 15 segundos de espera antes de procesar
+const SESSION_TTL = 30 * 60 * 1000;
+const PROCESS_DELAY = 15 * 1000;
 
 function getOrCreateSession(sessionId, body) {
   if (!sessions.has(sessionId)) {
@@ -106,7 +106,7 @@ function mapVarsToPayload(vars, meta) {
     mobilephone:             telefono,
     canal,
     new_areadeinteresid:     vars["Area ID"]            || vars["AreaID"] || null,
-    new_programadeinteresid: vars["Programa ID"]        || vars["ProgramaID"] || vars["Programa Seleccionado"] || null,
+    new_programadeinteresid: vars["Programa ID"]        || vars["ProgramaID"] || vars["Programa Seleccionado"] || vars["ProgramaSeleccionado"] || null,
     new_utm_source:          vars["utm_source"]         || null,
     new_utm_medium:          vars["utm_medium"]         || null,
     new_utm_campaign:        vars["utm_campaign"]       || null,
@@ -310,6 +310,12 @@ app.post("/webhook/botmaker", async (req, res) => {
     }
   }
 
+  // ─── DEBUG BODY COMPLETO ──────────────────────────────────────────────────
+  console.log("=== BODY COMPLETO ===");
+  console.log(JSON.stringify(req.body, null, 2));
+  console.log("=== FIN BODY ===");
+  // ─────────────────────────────────────────────────────────────────────────
+
   const body = req.body;
   const sessionId = body.sessionId;
   const newVars = body.variables || {};
@@ -318,7 +324,6 @@ app.post("/webhook/botmaker", async (req, res) => {
     return res.status(200).json({ ok: true, skipped: true, reason: "sin sessionId" });
   }
 
-  // Acumular variables
   const session = getOrCreateSession(sessionId, body);
   Object.assign(session.vars, newVars);
   scheduleCleanup(sessionId);
@@ -326,19 +331,16 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log(`📌 Sesión  : ${sessionId}`);
   console.log(`   Vars    : ${JSON.stringify(session.vars)}`);
 
-  // Si ya fue procesada no hacer nada
   if (session.processed) {
     console.log("✅ Sesión ya procesada — ignorando");
     return res.status(200).json({ ok: true, skipped: true, reason: "ya procesado" });
   }
 
-  // Si no tiene las variables mínimas seguir esperando
   if (!hasRequiredVars(session.vars)) {
     console.log("⏳ Esperando más variables...");
     return res.status(200).json({ ok: true, skipped: true, reason: "variables incompletas" });
   }
 
-  // Tiene las variables mínimas — iniciar o reiniciar el timer de 15 segundos
   if (session.processTimer) {
     clearTimeout(session.processTimer);
     console.log("⏱️  Timer reiniciado — esperando 15s para acumular más variables");
