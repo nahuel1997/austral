@@ -92,6 +92,40 @@ function crmHeaders(token) {
   };
 }
 
+// ─── Buscar GUID de área por nombre ─────────────────────────────────────────
+async function findAreaIdByName(name, token) {
+  if (!name?.trim()) return null;
+  // Si ya es un GUID válido lo devolvemos directamente
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) return name;
+  try {
+    const url = `${CRM_BASE_URL}/new_intereses?$filter=new_name eq '${encodeURIComponent(name)}'&$select=new_interesid&$top=1`;
+    const { data } = await axios.get(url, { headers: crmHeaders(token) });
+    const id = data.value?.[0]?.new_interesid ?? null;
+    console.log(`   🔍 Área "${name}" → ${id ?? "no encontrada"}`);
+    return id;
+  } catch (e) {
+    console.error(`   ⚠️ Error buscando área "${name}":`, e.response?.data ?? e.message);
+    return null;
+  }
+}
+
+// ─── Buscar GUID de carrera por nombre ──────────────────────────────────────
+async function findCarreraIdByName(name, token) {
+  if (!name?.trim()) return null;
+  // Si ya es un GUID válido lo devolvemos directamente
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) return name;
+  try {
+    const url = `${CRM_BASE_URL}/new_carreras?$filter=new_name eq '${encodeURIComponent(name)}'&$select=new_carreraid&$top=1`;
+    const { data } = await axios.get(url, { headers: crmHeaders(token) });
+    const id = data.value?.[0]?.new_carreraid ?? null;
+    console.log(`   🔍 Carrera "${name}" → ${id ?? "no encontrada"}`);
+    return id;
+  } catch (e) {
+    console.error(`   ⚠️ Error buscando carrera "${name}":`, e.response?.data ?? e.message);
+    return null;
+  }
+}
+
 // ─── Mapear variables acumuladas al formato interno ──────────────────────────
 function mapVarsToPayload(vars, meta) {
   const canal = meta.chatPlatform === "whatsapp" ? "WhatsApp" : "Web";
@@ -100,23 +134,23 @@ function mapVarsToPayload(vars, meta) {
     : vars["Telefono"] || vars["Teléfono"] || null;
 
   return {
-    firstname:               vars["Nombre"]                  || null,
-    lastname:                vars["Apellido"]                || null,
-    emailaddress1:           vars["Mail"]                    || vars["Email"] || null,
+    firstname:               vars["Nombre"]               || null,
+    lastname:                vars["Apellido"]             || null,
+    emailaddress1:           vars["Mail"]                 || vars["Email"] || null,
     mobilephone:             telefono,
     canal,
-    new_areadeinteresid:     vars["Area"]                    || vars["Area ID"] || vars["AreaID"] || null,
-    new_programadeinteresid: vars["ProgramaSeleccionado"]    || vars["Programa ID"] || vars["ProgramaID"] || vars["Programa Seleccionado"] || null,
-    new_utm_source:          vars["utm_source"]              || null,
-    new_utm_medium:          vars["utm_medium"]              || null,
-    new_utm_campaign:        vars["utm_campaign"]            || null,
-    new_utm_term:            vars["utm_term"]                || null,
-    new_utm_content:         vars["utm_content"]             || null,
-    new_googleclickid:       vars["gclid"]                   || null,
-    new_sourceid:            vars["source_id"]               || null,
-    new_campaignid:          vars["campaign_id"]             || null,
-    new_origencandidato:     vars["origen_candidato"]        || null,
-    description:             vars["Consulta"]                || null,
+    new_areadeinteresnombre: vars["Area"]                 || vars["Area ID"] || vars["AreaID"] || null,
+    new_programanombre:      vars["ProgramaSeleccionado"] || vars["Programa ID"] || vars["ProgramaID"] || vars["Programa Seleccionado"] || null,
+    new_utm_source:          vars["utm_source"]           || null,
+    new_utm_medium:          vars["utm_medium"]           || null,
+    new_utm_campaign:        vars["utm_campaign"]         || null,
+    new_utm_term:            vars["utm_term"]             || null,
+    new_utm_content:         vars["utm_content"]          || null,
+    new_googleclickid:       vars["gclid"]                || null,
+    new_sourceid:            vars["source_id"]            || null,
+    new_campaignid:          vars["campaign_id"]          || null,
+    new_origencandidato:     vars["origen_candidato"]     || null,
+    description:             vars["Consulta"]             || null,
   };
 }
 
@@ -180,12 +214,12 @@ function buildLeadBody(payload, existing = null) {
 }
 
 // ─── Construir body del Interés del contacto (área) ─────────────────────────
-function buildInteresBody(payload, leadId) {
+function buildInteresBody(payload, leadId, areaId) {
   const body = {
     "new_ClientePotencial@odata.bind": `/leads(${leadId})`,
   };
-  if (payload.new_areadeinteresid) {
-    body["new_Interes@odata.bind"] = `/new_intereses(${payload.new_areadeinteresid})`;
+  if (areaId) {
+    body["new_Interes@odata.bind"] = `/new_intereses(${areaId})`;
   }
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
@@ -195,12 +229,12 @@ function buildInteresBody(payload, leadId) {
 }
 
 // ─── Construir body de Relación cliente carrera (programa) ──────────────────
-function buildRelacionCarreraBody(payload, leadId) {
+function buildRelacionCarreraBody(payload, leadId, carreraId) {
   const body = {
     "new_clientepotencial@odata.bind": `/leads(${leadId})`,
   };
-  if (payload.new_programadeinteresid) {
-    body["new_carrera@odata.bind"] = `/new_carreras(${payload.new_programadeinteresid})`;
+  if (carreraId) {
+    body["new_carrera@odata.bind"] = `/new_carreras(${carreraId})`;
   }
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
@@ -246,13 +280,13 @@ async function processSession(sessionId) {
   const payload = mapVarsToPayload(session.vars, session.meta);
 
   console.log(`\n🚀 PROCESANDO SESIÓN: ${sessionId}`);
-  console.log(`   Variables finales: ${JSON.stringify(session.vars)}`);
+  console.log(`   Variables finales : ${JSON.stringify(session.vars)}`);
   console.log(`   Nombre    : ${payload.firstname} ${payload.lastname ?? "(sin apellido)"}`);
   console.log(`   Email     : ${payload.emailaddress1}`);
   console.log(`   Teléfono  : ${payload.mobilephone ?? "(no enviado)"}`);
   console.log(`   Canal     : ${payload.canal}`);
-  console.log(`   Área ID   : ${payload.new_areadeinteresid ?? "(no enviado)"}`);
-  console.log(`   Programa  : ${payload.new_programadeinteresid ?? "(no enviado)"}`);
+  console.log(`   Área      : ${payload.new_areadeinteresnombre ?? "(no enviado)"}`);
+  console.log(`   Programa  : ${payload.new_programanombre ?? "(no enviado)"}`);
   console.log(`   UTM Source: ${payload.new_utm_source ?? "-"}`);
 
   const errors = validatePayload(payload);
@@ -264,6 +298,14 @@ async function processSession(sessionId) {
 
   try {
     const token = await getCrmToken();
+
+    // Resolver nombres a GUIDs
+    const areaId = await findAreaIdByName(payload.new_areadeinteresnombre, token);
+    const carreraId = await findCarreraIdByName(payload.new_programanombre, token);
+
+    console.log(`   ✅ Área ID   : ${areaId ?? "(no encontrada)"}`);
+    console.log(`   ✅ Carrera ID: ${carreraId ?? "(no encontrada)"}`);
+
     const existingLead = await findLeadByEmail(payload.emailaddress1.trim(), token);
     let leadId, leadAction;
 
@@ -278,8 +320,8 @@ async function processSession(sessionId) {
       leadAction = "created";
     }
 
-    const interesId = await createInteresDelContacto(buildInteresBody(payload, leadId), token);
-    const relacionId = await createRelacionCarrera(buildRelacionCarreraBody(payload, leadId), token);
+    const interesId = await createInteresDelContacto(buildInteresBody(payload, leadId, areaId), token);
+    const relacionId = await createRelacionCarrera(buildRelacionCarreraBody(payload, leadId, carreraId), token);
 
     console.log("\n============================================================");
     console.log("🎉 PROCESO COMPLETADO");
