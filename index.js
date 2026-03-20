@@ -185,7 +185,7 @@ function buildInteresBody(payload, leadId) {
     "new_ClientePotencial@odata.bind": `/leads(${leadId})`,
   };
   if (payload.new_areadeinteresid) {
-    body["new_interes@odata.bind"] = `/new_intereses(${payload.new_areadeinteresid})`;
+    body["new_Interes@odata.bind"] = `/new_intereses(${payload.new_areadeinteresid})`;
   }
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
