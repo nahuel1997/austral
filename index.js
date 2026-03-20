@@ -59,6 +59,92 @@ function hasRequiredVars(vars) {
   return REQUIRED_VARS.every(k => vars[k]?.trim());
 }
 
+// ─── Mapper: Nombre Botmaker → Nombre CRM ────────────────────────────────────
+const PROGRAMA_MAPPER = {
+  "Doctorado en Derecho": "Doctorado en Derecho (Sede Buenos Aires)",
+  "Maestría en Derecho LL.M.": "Maestría en Derecho - MD (Sede Buenos Aires)",
+  "Maestría en Derecho LL.M. con Orientación en Derecho Electoral": "Maestría en Derecho - MD (Sede Buenos Aires)",
+  "Certificación Internacional en Management Legal": "Programa de Certificación Internacional en Management Legal (Sede Buenos Aires)",
+  "Diplomatura en LegalTech Avanzado": "Diplomatura en LegalTech Avanzado 2025 (Sede Buenos Aires)",
+  "Diplomatura en Teoría del Derecho y de la Argumentación Jurídica": "Programa de Presentaciones Persuasivas (Sede Buenos Aires)",
+  "Programa de Derecho y Startups": "Programa Derecho y Start-Ups (Sede Buenos Aires)",
+  "Programa ejecutivo de Inteligencia Artificial Generativa": "Programa Ejecutivo - Inteligencia Artificial Generativa para la Práctica Profesional. Chat - GPT y Gemini (Sede Buenos Aires)",
+  "Programa internacional de Derecho de Impacto": "Programa Derecho de Triple Impacto (Sede Buenos Aires)",
+  "Programa Internacional de Privacidad de Datos": "Programa Internacional en Privacidad de Datos - Alumni FD (Sede Buenos Aires)",
+  "Programa Internacional sobre Neurociencias y Derecho": "Programa Internacional: Neurociencias y Derecho (Sede Buenos Aires)",
+  "Programa LegalTech": "Programa El Abogado del Futuro: Legaltech y la Transformación Digital del Derecho (Sede Buenos Aires)",
+  "Curso Internacional Arbitraje Societario": "Curso de Arbitraje Societario (Sede Buenos Aires)",
+  "Diplomatura en Arbitraje Comercial y de Inversiones": "Diplomatura en Arbitraje Comercial y de Inversiones - DArb (Sede Buenos Aires)",
+  "Maestría en Derecho LL.M. con orientación en Arbitraje, Litigios y Contratos Internacionales": "Maestría en Derecho - MD (Sede Buenos Aires)",
+  "Programa Derecho de la Construcción": "Programa Derecho de la Construcción (Sede Buenos Aires)",
+  "Diplomado Post-Magistral en Derecho Administrativo Profundizado": "Diplomado Post-Magistral en Derecho Administrativo Profundizado - DDA (Sede Buenos Aires)",
+  "Diplomatura en Derecho de los Hidrocarburos y de la Energía": "Diplomatura en Derecho de los Hidrocarburos - DDA (Sede Buenos Aires)",
+  "Diplomatura en Derecho Sanitario": "Diplomatura en Derecho Sanitario (Sede Buenos Aires)",
+  "Especialización en Contrataciones Públicas": "Especialización en Contrataciones Públicas - MD (Sede Buenos Aires)",
+  "Maestría en Derecho Administrativo": "Maestría en Derecho Administrativo - MD (Sede Buenos Aires)",
+  "Curso de Latín II": "Curso de Latín II (Sede Buenos Aires)",
+  "Curso Latín I": "Curso de Latín I (Sede Buenos Aires)",
+  "Diplomatura en Contratos y Litigios Judiciales Internacionales": "Diplomatura en Contratos y Litigios Judiciales Internacionales - DDC (Sede Buenos Aires)",
+  "Diplomatura en Derecho Privado Patrimonial": "Diplomatura en Derecho Privado Patrimonial - DDC (Sede Buenos Aires)",
+  "Maestría en Derecho Civil": "Maestría en Derecho Civil (Sede Buenos Aires)",
+  "Programa de Derecho de Consumo Inmobiliario": "Programa Derecho de Consumo Inmobiliario (Sede Buenos Aires)",
+  "Programa de Planificación Económica Familiar": "Programa en Planificación Económica Familiar (Sede Buenos Aires)",
+  "Programa de Técnicas para la Redacción de Contratos y Dictámenes Jurídicos": "Programa de Técnicas para la Redacción de Contratos y Dictámenes Jurídicos - DDC (Sede Buenos Aires)",
+  "Seminario de Historia de Roma": "Seminario de Historia de Roma - DDC - CIDR (Sede Buenos Aires)",
+  "Diplomatura en Derecho Constitucional Latinoamericano": "Diplomatura en Derecho Constitucional Latinoamericano - DFDDC (Sede Buenos Aires)",
+  "Diplomatura en Derecho Constitucional Profundizado": "Diplomatura en Derecho Constitucional Profundizado - DFD (Sede Buenos Aires)",
+  "Diplomatura en Derecho Procesal Constitucional": "Diplomatura en Derecho Procesal Constitucional - DFD (Sede Buenos Aires)",
+  "Maestría en Derecho LL.M. con Orientación en Derecho Constitucional": "Maestría en Derecho - MD (Sede Buenos Aires)",
+  "Programa de Derecho de Propiedad en la Constitución": "Programa Derecho de la Propiedad en la Constitución (Sede Buenos Aires)",
+  "Programa de Historia de la Corte Suprema de Justicia de la Nación y su Jurisprudencia": "Programa de Historia de la Corte Suprema y su Jurisprudencia (Sede Buenos Aires)",
+  "Semana Internacional de Diplomatura en Derecho Constitucional Latinoamericano": "Semana Internacional DDCL 2025 (Sede Buenos Aires)",
+  "Diplomatura en Derecho del Deporte": "CDD - Diplomatura en Derecho del Deporte (Sede Buenos Aires)",
+  "Maestría en Derecho LL.M. con Orientación en Derecho del Deporte": "Maestría en Derecho - MD (Sede Buenos Aires)",
+  "Curso sobre Normas Principios y Derechos Fundamentales del Trabajo": "Curso sobre Normas Principios y Derechos Fundamentales del Trabajo (Sede Buenos Aires)",
+  "Diplomatura en Derecho del Trabajo y Relaciones Laborales": "Diplomatura en Derecho del Trabajo y Relaciones Laborales - DDTr. (Sede Buenos Aires)",
+  "Maestría en Derecho del Trabajo y Relaciones Laborales": "Maestría en Derecho del Trabajo y Relaciones Laborales - MD (Sede Buenos Aires)",
+  "Curso de Fusiones y adquisiciones de empresas": "Fusiones y Adquisiciones de Empresas. Oportunidades y Desafíos Globales 2025 (Sede Buenos Aires)",
+  "Diplomatura en Derecho Bancario y Mercado de Capitales": "Diplomatura en Derecho Bancario y Mercado de Capitales (Sede Buenos Aires)",
+  "Maestría en Derecho Empresario": "Maestría en Derecho Empresario (Sede Buenos Aires)",
+  "Maestría en Derecho Empresario Global": "Maestría en Derecho Empresario Global - MD (Sede Buenos Aires)",
+  "Programa de Blockchain e Inteligencia artificial en el Derecho Empresario": "Programa Blockchain, Derecho y Empresa - DDE (Sede Buenos Aires)",
+  "Programa de Derecho Societario Actual": "Programa de Derecho Societario Actual - DDE (Sede Buenos Aires)",
+  "Programa de Régimen Jurídico de los Agronegocios": "Programa de Régimen Jurídico de los Agronegocios - DDE (Sede Buenos Aires)",
+  "Diplomatura en Derechos Humanos": "Diplomatura en Derechos Humanos - DFD (Sede Buenos Aires)",
+  "Maestría en Magistratura y Derecho Judicial": "Maestría en Magistratura y Derecho Judicial - MD (Sede Buenos Aires)",
+  "Maestría en Magistratura y Derecho Judicial Internacional": "Maestría en Magistratura y Derecho Judicial - MD (Sede Buenos Aires)",
+  "Programa de Gestión Judicial Efectiva": "Programa Gestión Judicial Efectiva - Inteligencia Artificial y Justicia 4.0 (Sede Buenos Aires)",
+  "Curso de Inteligencia artificial en el proceso penal": "Inteligencia Artificial en el Proceso Penal (Sede Buenos Aires)",
+  "Diplomatura en Derecho Penal Económico": "Diplomatura en Derecho Penal Económico (Sede Buenos Aires)",
+  "Diplomatura en Litigación Penal": "Diplomatura en Litigación Penal - DDP (Sede Buenos Aires)",
+  "Diplomatura Internacional en Ciberdelincuencia y Tecnologías Aplicadas a la Investigación": "Diplomatura Internacional en Ciberdelincuencia y Tecnologías Aplicadas a la Investigación - DDP (Sede Buenos Aires)",
+  "Maestría en Derecho LL.M. con orientación Internacional en Ciberdelincuencia y tecnologías aplicadas a la investigación": "Maestría en Derecho - MD (Sede Buenos Aires)",
+  "Maestría en Derecho Penal": "Maestría en Derecho Penal (Sede Buenos Aires)",
+  "Diplomatura en Estudio del Código Procesal Civil Adversarial de la Provincia del Neuquén": "Diplomatura Estudio del Código Procesal Civil Adversarial de la Provincia del Neuquén (Sede Buenos Aires)",
+  "Maestría en Derecho Procesal": "Maestría en Derecho Procesal (Sede Buenos Aires)",
+  "Curso de Contabilidad para Abogados": "Curso Online de Contabilidad para Abogados - DDT (Sede Buenos Aires)",
+  "Curso de Fiscalidad de la Economía Digitalizada y las Tecnologías Emergentes": "Curso de Fiscalidad de la Economía Digitalizada y las Tecnologías Emergentes (Sede Buenos Aires)",
+  "Curso Intensivo de Derecho Tributario Internacional": "Curso Intensivo en Derecho Internacional Tributario (Sede Buenos Aires)",
+  "Diplomatura en Derecho Aduanero": "Diplomatura en Derecho Aduanero - DDT (Sede Buenos Aires)",
+  "Diplomatura en Precios de Transferencia en Latinoamérica": "Diplomatura en Precios de Transferencia (Sede Buenos Aires)",
+  "Diplomatura Regional en Asesoramiento Tributario": "Diplomatura Regional en Asesoramiento Tributario - DDT (Sede Buenos Aires)",
+  "Maestría en Derecho Tributario": "Maestría en Derecho Tributario (Sede Buenos Aires)",
+  "Programa de Actualización en Derecho Tributario": "Curso de Actualización en Derecho Tributario (Sede Buenos Aires)",
+  "Workshop de Jurisprudencia Tributaria": "Taller de Jurisprudencia Tributaria - DDT (Sede Buenos Aires)",
+  "Programa Plain English Skills for Lawyers": "Programa Plain English Skills for Lawyers - ADL (Sede Buenos Aires)",
+  "Programa Practical & Intensive Course in Legal English": "Programa Practical & Intensive Course in Legal English (Sede Buenos Aires)",
+  "Workshop Contract Drafting": "Workshop on Contract Drafting (Sede Buenos Aires)",
+  "Diplomatura en Propiedad Intelectual": "Diplomatura en Propiedad Intelectual - CPI (Sede Buenos Aires)",
+  "Maestría en Propiedad Intelectual y Nuevas Tecnologías": "Maestría en Propiedad Intelectual y Nuevas Tecnologías - MD (Sede Buenos Aires)",
+};
+
+function mapProgramaNombre(nombreBot) {
+  if (!nombreBot?.trim()) return null;
+  const mapped = PROGRAMA_MAPPER[nombreBot.trim()];
+  if (!mapped) console.log(`   ⚠️ Programa "${nombreBot}" no encontrado en el mapper`);
+  return mapped || nombreBot;
+}
+
 // ─── Cache del token CRM ─────────────────────────────────────────────────────
 let crmTokenCache = { token: null, expiresAt: 0 };
 
@@ -95,7 +181,6 @@ function crmHeaders(token) {
 // ─── Buscar GUID de área por nombre ─────────────────────────────────────────
 async function findAreaIdByName(name, token) {
   if (!name?.trim()) return null;
-  // Si ya es un GUID válido lo devolvemos directamente
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) return name;
   try {
     const url = `${CRM_BASE_URL}/new_intereses?$filter=new_name eq '${encodeURIComponent(name)}'&$select=new_interesid&$top=1`;
@@ -112,7 +197,6 @@ async function findAreaIdByName(name, token) {
 // ─── Buscar GUID de carrera por nombre ──────────────────────────────────────
 async function findCarreraIdByName(name, token) {
   if (!name?.trim()) return null;
-  // Si ya es un GUID válido lo devolvemos directamente
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) return name;
   try {
     const url = `${CRM_BASE_URL}/new_carreras?$filter=new_name eq '${encodeURIComponent(name)}'&$select=new_carreraid&$top=1`;
@@ -133,24 +217,26 @@ function mapVarsToPayload(vars, meta) {
     ? meta.contactId
     : vars["Telefono"] || vars["Teléfono"] || null;
 
+  const programaBot = vars["ProgramaSeleccionado"] || vars["Programa ID"] || vars["ProgramaID"] || vars["Programa Seleccionado"] || null;
+
   return {
-    firstname:               vars["Nombre"]               || null,
-    lastname:                vars["Apellido"]             || null,
-    emailaddress1:           vars["Mail"]                 || vars["Email"] || null,
+    firstname:               vars["Nombre"]             || null,
+    lastname:                vars["Apellido"]           || null,
+    emailaddress1:           vars["Mail"]               || vars["Email"] || null,
     mobilephone:             telefono,
     canal,
-    new_areadeinteresnombre: vars["Area"]                 || vars["Area ID"] || vars["AreaID"] || null,
-    new_programanombre:      vars["ProgramaSeleccionado"] || vars["Programa ID"] || vars["ProgramaID"] || vars["Programa Seleccionado"] || null,
-    new_utm_source:          vars["utm_source"]           || null,
-    new_utm_medium:          vars["utm_medium"]           || null,
-    new_utm_campaign:        vars["utm_campaign"]         || null,
-    new_utm_term:            vars["utm_term"]             || null,
-    new_utm_content:         vars["utm_content"]          || null,
-    new_googleclickid:       vars["gclid"]                || null,
-    new_sourceid:            vars["source_id"]            || null,
-    new_campaignid:          vars["campaign_id"]          || null,
-    new_origencandidato:     vars["origen_candidato"]     || null,
-    description:             vars["Consulta"]             || null,
+    new_areadeinteresnombre: vars["Area"]               || vars["Area ID"] || vars["AreaID"] || null,
+    new_programanombre:      mapProgramaNombre(programaBot),
+    new_utm_source:          vars["utm_source"]         || null,
+    new_utm_medium:          vars["utm_medium"]         || null,
+    new_utm_campaign:        vars["utm_campaign"]       || null,
+    new_utm_term:            vars["utm_term"]           || null,
+    new_utm_content:         vars["utm_content"]        || null,
+    new_googleclickid:       vars["gclid"]              || null,
+    new_sourceid:            vars["source_id"]          || null,
+    new_campaignid:          vars["campaign_id"]        || null,
+    new_origencandidato:     vars["origen_candidato"]   || null,
+    description:             vars["Consulta"]           || null,
   };
 }
 
@@ -299,7 +385,6 @@ async function processSession(sessionId) {
   try {
     const token = await getCrmToken();
 
-    // Resolver nombres a GUIDs
     const areaId = await findAreaIdByName(payload.new_areadeinteresnombre, token);
     const carreraId = await findCarreraIdByName(payload.new_programanombre, token);
 
@@ -344,7 +429,6 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log(`   Fecha/Hora : ${new Date().toLocaleString("es-AR")}`);
   console.log("============================================================");
 
-  // Auth
   if (WEBHOOK_SECRET && req.headers["auth-bm-token"]) {
     if (req.headers["auth-bm-token"] !== WEBHOOK_SECRET) {
       console.error("❌ [AUTH] Token inválido");
@@ -352,11 +436,9 @@ app.post("/webhook/botmaker", async (req, res) => {
     }
   }
 
-  // ─── DEBUG BODY COMPLETO ──────────────────────────────────────────────────
   console.log("=== BODY COMPLETO ===");
   console.log(JSON.stringify(req.body, null, 2));
   console.log("=== FIN BODY ===");
-  // ─────────────────────────────────────────────────────────────────────────
 
   const body = req.body;
   const sessionId = body.sessionId;
