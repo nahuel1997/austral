@@ -100,23 +100,23 @@ function mapVarsToPayload(vars, meta) {
     : vars["Telefono"] || vars["Teléfono"] || null;
 
   return {
-    firstname:               vars["Nombre"]             || null,
-    lastname:                vars["Apellido"]           || null,
-    emailaddress1:           vars["Mail"]               || vars["Email"] || null,
+    firstname:               vars["Nombre"]                  || null,
+    lastname:                vars["Apellido"]                || null,
+    emailaddress1:           vars["Mail"]                    || vars["Email"] || null,
     mobilephone:             telefono,
     canal,
-    new_areadeinteresid:     vars["Area ID"]            || vars["AreaID"] || null,
-    new_programadeinteresid: vars["Programa ID"]        || vars["ProgramaID"] || vars["Programa Seleccionado"] || vars["ProgramaSeleccionado"] || null,
-    new_utm_source:          vars["utm_source"]         || null,
-    new_utm_medium:          vars["utm_medium"]         || null,
-    new_utm_campaign:        vars["utm_campaign"]       || null,
-    new_utm_term:            vars["utm_term"]           || null,
-    new_utm_content:         vars["utm_content"]        || null,
-    new_googleclickid:       vars["gclid"]              || null,
-    new_sourceid:            vars["source_id"]          || null,
-    new_campaignid:          vars["campaign_id"]        || null,
-    new_origencandidato:     vars["origen_candidato"]   || null,
-    description:             vars["Consulta"]           || null,
+    new_areadeinteresid:     vars["Area"]                    || vars["Area ID"] || vars["AreaID"] || null,
+    new_programadeinteresid: vars["ProgramaSeleccionado"]    || vars["Programa ID"] || vars["ProgramaID"] || vars["Programa Seleccionado"] || null,
+    new_utm_source:          vars["utm_source"]              || null,
+    new_utm_medium:          vars["utm_medium"]              || null,
+    new_utm_campaign:        vars["utm_campaign"]            || null,
+    new_utm_term:            vars["utm_term"]                || null,
+    new_utm_content:         vars["utm_content"]             || null,
+    new_googleclickid:       vars["gclid"]                   || null,
+    new_sourceid:            vars["source_id"]               || null,
+    new_campaignid:          vars["campaign_id"]             || null,
+    new_origencandidato:     vars["origen_candidato"]        || null,
+    description:             vars["Consulta"]                || null,
   };
 }
 
