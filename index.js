@@ -145,6 +145,26 @@ function mapProgramaNombre(nombreBot) {
   return mapped || nombreBot;
 }
 
+// ─── Parser de UTMs desde URL ─────────────────────────────────────────────────
+function parseUTMs(url) {
+  if (!url?.trim()) return {};
+  try {
+    const u = new URL(url);
+    return {
+      utm_source:   u.searchParams.get("utm_source")   || null,
+      utm_medium:   u.searchParams.get("utm_medium")   || null,
+      utm_campaign: u.searchParams.get("utm_campaign") || null,
+      utm_term:     u.searchParams.get("utm_term")     || null,
+      utm_content:  u.searchParams.get("utm_content")  || null,
+      campaign_id:  u.searchParams.get("campaignid")   || null,
+      gclid:        u.searchParams.get("gclid")        || null,
+    };
+  } catch (e) {
+    console.log(`   ⚠️ URL UTM inválida: ${url}`);
+    return {};
+  }
+}
+
 // ─── Cache del token CRM ─────────────────────────────────────────────────────
 let crmTokenCache = { token: null, expiresAt: 0 };
 
@@ -219,6 +239,9 @@ function mapVarsToPayload(vars, meta) {
 
   const programaBot = vars["ProgramaSeleccionado"] || vars["Programa ID"] || vars["ProgramaID"] || vars["Programa Seleccionado"] || null;
 
+  // Parsear UTMs desde URL
+  const utms = parseUTMs(vars["UTM"] || null);
+
   return {
     firstname:               vars["Nombre"]             || null,
     lastname:                vars["Apellido"]           || null,
@@ -227,15 +250,16 @@ function mapVarsToPayload(vars, meta) {
     canal,
     new_areadeinteresnombre: vars["Area"]               || vars["Area ID"] || vars["AreaID"] || null,
     new_programanombre:      mapProgramaNombre(programaBot),
-    new_utm_source:          vars["utm_source"]         || null,
-    new_utm_medium:          vars["utm_medium"]         || null,
-    new_utm_campaign:        vars["utm_campaign"]       || null,
-    new_utm_term:            vars["utm_term"]           || null,
-    new_utm_content:         vars["utm_content"]        || null,
-    new_googleclickid:       vars["gclid"]              || null,
+    new_origen:              "Bot",
+    new_origencandidato:     "WhatsApp",
+    new_utm_source:          utms.utm_source            || vars["utm_source"]   || null,
+    new_utm_medium:          utms.utm_medium            || vars["utm_medium"]   || null,
+    new_utm_campaign:        utms.utm_campaign          || vars["utm_campaign"] || null,
+    new_utm_term:            utms.utm_term              || vars["utm_term"]     || null,
+    new_utm_content:         utms.utm_content           || vars["utm_content"]  || null,
+    new_googleclickid:       utms.gclid                 || vars["gclid"]        || null,
+    new_campaignid:          utms.campaign_id           || vars["campaign_id"]  || null,
     new_sourceid:            vars["source_id"]          || null,
-    new_campaignid:          vars["campaign_id"]        || null,
-    new_origencandidato:     vars["origen_candidato"]   || null,
     description:             vars["Consulta"]           || null,
   };
 }
@@ -292,6 +316,7 @@ function buildLeadBody(payload, existing = null) {
     if (!existing || !existing.mobilephone) body.mobilephone = cleaned;
   }
   if (payload.new_origencandidato) body.new_origencandidato = payload.new_origencandidato;
+  if (payload.new_origen) body.new_origen = payload.new_origen;
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
     body["ownerid@odata.bind"] = `/${entity}(${payload.ownerid})`;
@@ -373,7 +398,12 @@ async function processSession(sessionId) {
   console.log(`   Canal     : ${payload.canal}`);
   console.log(`   Área      : ${payload.new_areadeinteresnombre ?? "(no enviado)"}`);
   console.log(`   Programa  : ${payload.new_programanombre ?? "(no enviado)"}`);
+  console.log(`   Origen    : ${payload.new_origen}`);
+  console.log(`   Origen C. : ${payload.new_origencandidato}`);
   console.log(`   UTM Source: ${payload.new_utm_source ?? "-"}`);
+  console.log(`   UTM Medium: ${payload.new_utm_medium ?? "-"}`);
+  console.log(`   UTM Camp. : ${payload.new_utm_campaign ?? "-"}`);
+  console.log(`   GCLID     : ${payload.new_googleclickid ?? "-"}`);
 
   const errors = validatePayload(payload);
   if (errors.length > 0) {
