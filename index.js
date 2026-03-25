@@ -239,7 +239,9 @@ async function findCarreraIdByName(name, token) {
 
 // ─── Mapear variables al formato interno ─────────────────────────────────────
 function mapVarsToPayload(vars, meta) {
-  const canal = meta.chatPlatform === "whatsapp" ? "WhatsApp" : "Web";
+  const canal = "Whatsapp";
+  origen
+  const origen = "Bot";
   const telefono = canal === "WhatsApp"
     ? meta.contactId
     : vars["Telefono"] || vars["Teléfono"] || null;
@@ -255,8 +257,8 @@ function mapVarsToPayload(vars, meta) {
     canal,
     new_areadeinteresnombre: vars["Area"] || vars["Area ID"] || vars["AreaID"] || null,
     new_programanombre:      mapProgramaNombre(programaBot),
-    new_origen:              "Bot",
-    new_origencandidato:      "WhatsApp" ,
+    new_origen:             origen,
+    new_origencandidato:     canal ,
     new_utm_source:          utms.utm_source   || vars["utm_source"]   || null,
     new_utm_medium:          utms.utm_medium   || vars["utm_medium"]   || null,
     new_utm_campaign:        utms.utm_campaign || vars["utm_campaign"] || null,
