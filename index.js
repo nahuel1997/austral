@@ -288,7 +288,7 @@ function mapVarsToPayload(vars, meta) {
     new_facultadnombre:      vars["Facultad"] || null,   // ✅ Facultad de Origen
     new_origencandidato:     26,
     new_interesadoposgrado:  true,
-    initialcommunication:    0,
+    initialcommunication:    1,
     new_detalleorigen:       "Bot",
     new_utm_source:          utms.utm_source   || vars["utm_source"]   || null,
     new_utm_medium:          utms.utm_medium   || vars["utm_medium"]   || null,
