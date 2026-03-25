@@ -255,25 +255,26 @@ function mapVarsToPayload(vars, meta) {
   const utms = parseUTMs(utmUrl);
 
   return {
-    firstname:                vars["Nombre"]         || null,
-    lastname:                 vars["Apellido"]        || null,
-    emailaddress1:            vars["Mail"] || vars["Email"] || null,
-    mobilephone:              telefono,
+    firstname:               vars["Nombre"]         || null,
+    lastname:                vars["Apellido"]        || null,
+    emailaddress1:           vars["Mail"] || vars["Email"] || null,
+    mobilephone:             telefono,
     canal,
-    new_areadeinteresnombre:  vars["Area"] || vars["Area ID"] || vars["AreaID"] || null,
-    new_programanombre:       mapProgramaNombre(programaBot),
-    new_origencandidato:      26,          // WhatsApp
-    new_interesadoposgrado:   true,        // ✅ Interesado Posgrado → siempre true
-    initialcommunication:     0,           // ✅ Comunicación inicial → 0 = Contactado
-    new_utm_source:           utms.utm_source   || vars["utm_source"]   || null,
-    new_utm_medium:           utms.utm_medium   || vars["utm_medium"]   || null,
-    new_utm_campaign:         utms.utm_campaign || vars["utm_campaign"] || null,
-    new_utm_term:             utms.utm_term     || vars["utm_term"]     || null,
-    new_utm_content:          utms.utm_content  || vars["utm_content"]  || null,
-    new_googleclickid:        utms.gclid        || vars["gclid"]        || null,
-    new_campaignid:           utms.campaign_id  || vars["campaign_id"]  || null,
-    new_sourceid:             vars["source_id"] || null,
-    description:              vars["Consulta"]  || null,
+    new_areadeinteresnombre: vars["Area"] || vars["Area ID"] || vars["AreaID"] || null,
+    new_programanombre:      mapProgramaNombre(programaBot),
+    new_origencandidato:     26,       // WhatsApp
+    new_interesadoposgrado:  true,     // Interesado Posgrado → Sí
+    initialcommunication:    0,        // Comunicación inicial → Contactado
+    new_detalleorigen:       "Bot",    // ✅ Detalle del origen → Bot
+    new_utm_source:          utms.utm_source   || vars["utm_source"]   || null,
+    new_utm_medium:          utms.utm_medium   || vars["utm_medium"]   || null,
+    new_utm_campaign:        utms.utm_campaign || vars["utm_campaign"] || null,
+    new_utm_term:            utms.utm_term     || vars["utm_term"]     || null,
+    new_utm_content:         utms.utm_content  || vars["utm_content"]  || null,
+    new_googleclickid:       utms.gclid        || vars["gclid"]        || null,
+    new_campaignid:          utms.campaign_id  || vars["campaign_id"]  || null,
+    new_sourceid:            vars["source_id"] || null,
+    description:             vars["Consulta"]  || null,
   };
 }
 
@@ -310,10 +311,11 @@ async function findLeadByEmail(email, token) {
 // ─── Construir bodies CRM ─────────────────────────────────────────────────────
 function buildLeadBody(payload, existing = null) {
   const body = {
-    firstname:               payload.firstname.trim(),
-    emailaddress1:           payload.emailaddress1.trim(),
-    new_interesadoposgrado:  true,   // ✅ siempre true
-    initialcommunication:    0,      // ✅ 0 = Contactado
+    firstname:              payload.firstname.trim(),
+    emailaddress1:          payload.emailaddress1.trim(),
+    new_interesadoposgrado: true,    // Interesado Posgrado → Sí
+    initialcommunication:   0,       // Comunicación inicial → Contactado
+    new_detalleorigen:      "Bot",   // ✅ Detalle del origen → Bot
   };
 
   if (payload.lastname?.trim()) body.lastname = payload.lastname.trim();
@@ -398,6 +400,7 @@ async function processSession(sessionId) {
   console.log(`   Programa            : ${payload.new_programanombre      ?? "(no enviado)"}`);
   console.log(`   Interesado Posgrado : ${payload.new_interesadoposgrado}`);
   console.log(`   Comunicación inicial: ${payload.initialcommunication} (Contactado)`);
+  console.log(`   Detalle origen      : ${payload.new_detalleorigen}`);
   console.log(`   UTM Source          : ${payload.new_utm_source          ?? "-"}`);
   console.log(`   UTM Medium          : ${payload.new_utm_medium          ?? "-"}`);
   console.log(`   UTM Camp.           : ${payload.new_utm_campaign        ?? "-"}`);
