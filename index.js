@@ -237,7 +237,7 @@ async function findCarreraIdByName(name, token) {
   }
 }
 
-// ─── ✅ Buscar GUID de business unit (Facultad) por nombre ───────────────────
+// ─── Buscar GUID de business unit (Facultad) por nombre ─────────────────────
 async function findFacultadIdByName(name, token) {
   if (!name?.trim()) { console.log("   ⚠️  Facultad no enviada"); return null; }
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) {
@@ -377,10 +377,11 @@ function buildRelacionCarreraBody(payload, leadId, carreraId) {
   return body;
 }
 
-// ─── ✅ Body Facultad de Origen usando businessunit ───────────────────────────
-function buildFacultadBody(leadId, facultadId) {
+// ─── ✅ Body Facultad de Origen con new_name ──────────────────────────────────
+function buildFacultadBody(leadId, facultadId, facultadNombre) {
   const body = {
     "new_clientepotencial@odata.bind": `/leads(${leadId})`,
+    new_name: facultadNombre || "Sin facultad",
   };
   if (facultadId) body["new_unidaddenegocio@odata.bind"] = `/businessunits(${facultadId})`;
   return body;
@@ -526,11 +527,15 @@ async function processSession(sessionId) {
     console.log(`   ✅ Relación creada: ${relacionId ?? "(sin programa)"}`);
 
     console.log("   Creando Facultad de Origen...");
-    const facultadRelId = await createFacultadOrigen(buildFacultadBody(leadId, facultadId), token);
+    const facultadRelId = await createFacultadOrigen(
+      buildFacultadBody(leadId, facultadId, payload.new_facultadnombre), token
+    );
     console.log(`   ✅ Facultad creada: ${facultadRelId ?? "(sin facultad)"}`);
 
     console.log("   Creando Origen del Cliente Potencial...");
-    const origenId = await createOrigenClientePotencial(buildOrigenBody(payload, leadId, areaId, carreraId), token);
+    const origenId = await createOrigenClientePotencial(
+      buildOrigenBody(payload, leadId, areaId, carreraId), token
+    );
     console.log(`   ✅ Origen creado: ${origenId ?? "(error)"}`);
 
     console.log("\n============================================================");
