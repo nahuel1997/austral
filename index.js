@@ -237,6 +237,26 @@ async function findCarreraIdByName(name, token) {
   }
 }
 
+// ─── Buscar GUID de facultad de origen por nombre ────────────────────────────
+async function findFacultadIdByName(name, token) {
+  if (!name?.trim()) { console.log("   ⚠️  Facultad no enviada"); return null; }
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) {
+    console.log(`   ✅ Facultad ya es GUID: ${name}`); return name;
+  }
+  console.log(`   🔍 Buscando facultad por nombre: "${name}"`);
+  try {
+    const url = `${CRM_BASE_URL}/new_facultaddeorigens?$filter=new_name eq '${encodeURIComponent(name)}'&$select=new_facultaddeorigenid&$top=1`;
+    const { data } = await axios.get(url, { headers: crmHeaders(token) });
+    const id = data.value?.[0]?.new_facultaddeorigenid ?? null;
+    if (id) console.log(`   ✅ Facultad encontrada → ID: ${id}`);
+    else    console.log(`   ❌ Facultad "${name}" no encontrada en CRM`);
+    return id;
+  } catch (e) {
+    console.error(`   💥 Error buscando facultad:`, e.response?.data ?? e.message);
+    return null;
+  }
+}
+
 // ─── Mapear variables al formato interno ─────────────────────────────────────
 function mapVarsToPayload(vars, meta) {
   const canal = "WhatsApp";
@@ -254,6 +274,9 @@ function mapVarsToPayload(vars, meta) {
 
   const utms = parseUTMs(utmUrl);
 
+  // ✅ ReferralURL va en description junto con Consulta
+  const descParts = [vars["Consulta"], vars["ReferralURL"]].filter(Boolean);
+
   return {
     firstname:               vars["Nombre"]         || null,
     lastname:                vars["Apellido"]        || null,
@@ -262,10 +285,11 @@ function mapVarsToPayload(vars, meta) {
     canal,
     new_areadeinteresnombre: vars["Area"] || vars["Area ID"] || vars["AreaID"] || null,
     new_programanombre:      mapProgramaNombre(programaBot),
-    new_origencandidato:     26,       // WhatsApp
-    new_interesadoposgrado:  true,     // Interesado Posgrado → Sí
-    initialcommunication:    0,        // Comunicación inicial → Contactado
-    new_detalleorigen:       "Bot",    // ✅ Detalle del origen → Bot
+    new_facultadnombre:      vars["Facultad"] || null,   // ✅ Facultad de Origen
+    new_origencandidato:     26,
+    new_interesadoposgrado:  true,
+    initialcommunication:    0,
+    new_detalleorigen:       "Bot",
     new_utm_source:          utms.utm_source   || vars["utm_source"]   || null,
     new_utm_medium:          utms.utm_medium   || vars["utm_medium"]   || null,
     new_utm_campaign:        utms.utm_campaign || vars["utm_campaign"] || null,
@@ -274,7 +298,7 @@ function mapVarsToPayload(vars, meta) {
     new_googleclickid:       utms.gclid        || vars["gclid"]        || null,
     new_campaignid:          utms.campaign_id  || vars["campaign_id"]  || null,
     new_sourceid:            vars["source_id"] || null,
-    description:             vars["Consulta"]  || null,
+    description:             descParts.length > 0 ? descParts.join("\n") : null,
   };
 }
 
@@ -313,9 +337,9 @@ function buildLeadBody(payload, existing = null) {
   const body = {
     firstname:              payload.firstname.trim(),
     emailaddress1:          payload.emailaddress1.trim(),
-    new_interesadoposgrado: true,    // Interesado Posgrado → Sí
-    initialcommunication:   0,       // Comunicación inicial → Contactado
-    new_detalleorigen:      "Bot",   // ✅ Detalle del origen → Bot
+    new_interesadoposgrado: true,
+    initialcommunication:   0,
+    new_detalleorigen:      "Bot",
   };
 
   if (payload.lastname?.trim()) body.lastname = payload.lastname.trim();
@@ -358,6 +382,13 @@ function buildRelacionCarreraBody(payload, leadId, carreraId) {
   return body;
 }
 
+// ✅ Body para Facultad de Origen
+function buildFacultadBody(leadId, facultadId) {
+  const body = { "new_clientepotencial@odata.bind": `/leads(${leadId})` };
+  if (facultadId) body["new_facultaddeorigen@odata.bind"] = `/new_facultaddeorigens(${facultadId})`;
+  return body;
+}
+
 // ─── Operaciones CRM ──────────────────────────────────────────────────────────
 async function createLead(body, token) {
   const { data, headers } = await axios.post(`${CRM_BASE_URL}/leads`, body, { headers: crmHeaders(token) });
@@ -376,6 +407,12 @@ async function createInteresDelContacto(body, token) {
 async function createRelacionCarrera(body, token) {
   const { data } = await axios.post(`${CRM_BASE_URL}/new_relacionclientecarreras`, body, { headers: crmHeaders(token) });
   return data?.new_relacionclientecarreraid;
+}
+
+// ✅ Crear registro Facultad de Origen
+async function createFacultadOrigen(body, token) {
+  const { data } = await axios.post(`${CRM_BASE_URL}/new_facultaddeorigens`, body, { headers: crmHeaders(token) });
+  return data?.new_facultaddeorigenid;
 }
 
 // ─── Procesar sesión en CRM ───────────────────────────────────────────────────
@@ -398,6 +435,7 @@ async function processSession(sessionId) {
   console.log(`   Canal               : ${payload.canal}`);
   console.log(`   Área                : ${payload.new_areadeinteresnombre ?? "(no enviado)"}`);
   console.log(`   Programa            : ${payload.new_programanombre      ?? "(no enviado)"}`);
+  console.log(`   Facultad            : ${payload.new_facultadnombre      ?? "(no enviado)"}`);
   console.log(`   Interesado Posgrado : ${payload.new_interesadoposgrado}`);
   console.log(`   Comunicación inicial: ${payload.initialcommunication} (Contactado)`);
   console.log(`   Detalle origen      : ${payload.new_detalleorigen}`);
@@ -408,7 +446,7 @@ async function processSession(sessionId) {
   console.log(`   UTM Cont.           : ${payload.new_utm_content         ?? "-"}`);
   console.log(`   GCLID               : ${payload.new_googleclickid       ?? "-"}`);
   console.log(`   Campaign ID         : ${payload.new_campaignid          ?? "-"}`);
-  console.log(`   Consulta            : ${payload.description ? payload.description.slice(0, 80) + "..." : "(vacía)"}`);
+  console.log(`   Description         : ${payload.description ? payload.description.slice(0, 100) + "..." : "(vacía)"}`);
   console.log("------------------------------------------------------------");
 
   const errors = validatePayload(payload);
@@ -426,9 +464,10 @@ async function processSession(sessionId) {
     const token = await getCrmToken();
 
     console.log("\n------------------------------------------------------------");
-    console.log("🔍 BUSCANDO ÁREA Y PROGRAMA EN CRM...");
+    console.log("🔍 BUSCANDO ÁREA, PROGRAMA Y FACULTAD EN CRM...");
     const areaId    = await findAreaIdByName(payload.new_areadeinteresnombre, token);
     const carreraId = await findCarreraIdByName(payload.new_programanombre, token);
+    const facultadId = await findFacultadIdByName(payload.new_facultadnombre, token);
 
     console.log("\n------------------------------------------------------------");
     console.log(`🔍 Buscando Lead con email: ${payload.emailaddress1.trim()}`);
@@ -450,6 +489,7 @@ async function processSession(sessionId) {
 
     console.log("\n------------------------------------------------------------");
     console.log("📎 CREANDO REGISTROS RELACIONADOS...");
+
     console.log("   Creando Interés del contacto (área)...");
     const interesId = await createInteresDelContacto(buildInteresBody(payload, leadId, areaId), token);
     console.log(`   ✅ Interés creado: ${interesId ?? "(sin área)"}`);
@@ -458,11 +498,16 @@ async function processSession(sessionId) {
     const relacionId = await createRelacionCarrera(buildRelacionCarreraBody(payload, leadId, carreraId), token);
     console.log(`   ✅ Relación creada: ${relacionId ?? "(sin programa)"}`);
 
+    console.log("   Creando Facultad de Origen...");
+    const facultadRelId = await createFacultadOrigen(buildFacultadBody(leadId, facultadId), token);
+    console.log(`   ✅ Facultad creada: ${facultadRelId ?? "(sin facultad)"}`);
+
     console.log("\n============================================================");
     console.log("🎉 PROCESO COMPLETADO EXITOSAMENTE");
     console.log(`   Lead      : ${leadAction === "created" ? "✅ CREADO" : "🔄 ACTUALIZADO"} → ${leadId}`);
-    console.log(`   Interés   : ${interesId  ?? "(no creado)"}`);
-    console.log(`   Relación  : ${relacionId ?? "(no creado)"}`);
+    console.log(`   Interés   : ${interesId    ?? "(no creado)"}`);
+    console.log(`   Relación  : ${relacionId   ?? "(no creado)"}`);
+    console.log(`   Facultad  : ${facultadRelId ?? "(no creado)"}`);
     console.log("============================================================\n");
 
   } catch (err) {
