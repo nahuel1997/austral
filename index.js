@@ -240,7 +240,6 @@ async function findCarreraIdByName(name, token) {
 // ─── Mapear variables al formato interno ─────────────────────────────────────
 function mapVarsToPayload(vars, meta) {
   const canal = "Whatsapp";
-  origen
   const origen = "Bot";
   const telefono = canal === "WhatsApp"
     ? meta.contactId
