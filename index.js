@@ -391,6 +391,7 @@ function buildOrigenBody(payload, leadId, areaId, carreraId) {
   const body = {
     subject: "Bot WhatsApp",
     "regardingobjectid_lead@odata.bind": `/leads(${leadId})`,
+    "new_clientepotencial@odata.bind":   `/leads(${leadId})`,
   };
 
   if (payload.new_tema)     body.new_tema    = payload.new_tema;
