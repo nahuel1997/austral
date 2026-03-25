@@ -274,7 +274,6 @@ function mapVarsToPayload(vars, meta) {
 
   const utms = parseUTMs(utmUrl);
 
-  // ✅ ReferralURL va en description junto con Consulta
   const descParts = [vars["Consulta"], vars["ReferralURL"]].filter(Boolean);
 
   return {
@@ -285,10 +284,10 @@ function mapVarsToPayload(vars, meta) {
     canal,
     new_areadeinteresnombre: vars["Area"] || vars["Area ID"] || vars["AreaID"] || null,
     new_programanombre:      mapProgramaNombre(programaBot),
-    new_facultadnombre:      vars["Facultad"] || null,   // ✅ Facultad de Origen
+    new_facultadnombre:      vars["Facultad"] || null,
     new_origencandidato:     26,
     new_interesadoposgrado:  true,
-    initialcommunication:    1,
+    initialcommunication:    0,
     new_detalleorigen:       "Bot",
     new_utm_source:          utms.utm_source   || vars["utm_source"]   || null,
     new_utm_medium:          utms.utm_medium   || vars["utm_medium"]   || null,
@@ -299,6 +298,9 @@ function mapVarsToPayload(vars, meta) {
     new_campaignid:          utms.campaign_id  || vars["campaign_id"]  || null,
     new_sourceid:            vars["source_id"] || null,
     description:             descParts.length > 0 ? descParts.join("\n") : null,
+    // Para org_origen
+    new_tema:                vars["ProgramaSeleccionado"] || null,
+    new_consulta:            vars["Consulta"] || null,
   };
 }
 
@@ -338,7 +340,7 @@ function buildLeadBody(payload, existing = null) {
     firstname:              payload.firstname.trim(),
     emailaddress1:          payload.emailaddress1.trim(),
     new_interesadoposgrado: true,
-    initialcommunication:   0,
+    initialcommunication:   1,
     new_detalleorigen:      "Bot",
   };
 
@@ -350,7 +352,6 @@ function buildLeadBody(payload, existing = null) {
   }
 
   if (payload.new_origencandidato) body.new_origencandidato = payload.new_origencandidato;
-
   if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
   if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
   if (payload.new_utm_campaign)  body.new_utm_campaign  = payload.new_utm_campaign;
@@ -359,8 +360,7 @@ function buildLeadBody(payload, existing = null) {
   if (payload.new_googleclickid) body.new_googleclickid = payload.new_googleclickid;
   if (payload.new_campaignid)    body.new_campaignid    = payload.new_campaignid;
   if (payload.new_sourceid)      body.new_sourceid      = payload.new_sourceid;
-
-  if (payload.description) body.description = payload.description;
+  if (payload.description)       body.description       = payload.description;
 
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
@@ -382,10 +382,44 @@ function buildRelacionCarreraBody(payload, leadId, carreraId) {
   return body;
 }
 
-// ✅ Body para Facultad de Origen
 function buildFacultadBody(leadId, facultadId) {
   const body = { "new_clientepotencial@odata.bind": `/leads(${leadId})` };
   if (facultadId) body["new_facultaddeorigen@odata.bind"] = `/new_facultaddeorigens(${facultadId})`;
+  return body;
+}
+
+// ─── Body Origen del Cliente Potencial (org_origen) ───────────────────────────
+function buildOrigenBody(payload, leadId, areaId, carreraId) {
+  const body = {
+    subject: "Bot WhatsApp",
+    // Referente a → el lead
+    "regardingobjectid_lead@odata.bind": `/leads(${leadId})`,
+    // Cliente Potencial
+    "new_clientepotencial@odata.bind": `/leads(${leadId})`,
+  };
+
+  // Tema → programa seleccionado
+  if (payload.new_tema)    body.new_tema    = payload.new_tema;
+
+  // Consulta → description
+  if (payload.new_consulta) body.description = payload.new_consulta;
+
+  // Área de Interés
+  if (areaId)    body["new_areadeinteresid@odata.bind"]    = `/new_intereses(${areaId})`;
+
+  // Programa de Interés
+  if (carreraId) body["new_programadeinteresid@odata.bind"] = `/new_carreras(${carreraId})`;
+
+  // UTMs
+  if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
+  if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
+  if (payload.new_utm_campaign)  body.new_utm_campaign  = payload.new_utm_campaign;
+  if (payload.new_utm_term)      body.new_utm_term      = payload.new_utm_term;
+  if (payload.new_utm_content)   body.new_utm_content   = payload.new_utm_content;
+  if (payload.new_googleclickid) body.new_googleclickid = payload.new_googleclickid;
+  if (payload.new_campaignid)    body.new_campaignid    = payload.new_campaignid;
+  if (payload.new_sourceid)      body.new_sourceid      = payload.new_sourceid;
+
   return body;
 }
 
@@ -409,10 +443,14 @@ async function createRelacionCarrera(body, token) {
   return data?.new_relacionclientecarreraid;
 }
 
-// ✅ Crear registro Facultad de Origen
 async function createFacultadOrigen(body, token) {
   const { data } = await axios.post(`${CRM_BASE_URL}/new_facultaddeorigens`, body, { headers: crmHeaders(token) });
   return data?.new_facultaddeorigenid;
+}
+
+async function createOrigenClientePotencial(body, token) {
+  const { data } = await axios.post(`${CRM_BASE_URL}/org_origens`, body, { headers: crmHeaders(token) });
+  return data?.activityid;
 }
 
 // ─── Procesar sesión en CRM ───────────────────────────────────────────────────
@@ -465,8 +503,8 @@ async function processSession(sessionId) {
 
     console.log("\n------------------------------------------------------------");
     console.log("🔍 BUSCANDO ÁREA, PROGRAMA Y FACULTAD EN CRM...");
-    const areaId    = await findAreaIdByName(payload.new_areadeinteresnombre, token);
-    const carreraId = await findCarreraIdByName(payload.new_programanombre, token);
+    const areaId     = await findAreaIdByName(payload.new_areadeinteresnombre, token);
+    const carreraId  = await findCarreraIdByName(payload.new_programanombre, token);
     const facultadId = await findFacultadIdByName(payload.new_facultadnombre, token);
 
     console.log("\n------------------------------------------------------------");
@@ -502,12 +540,17 @@ async function processSession(sessionId) {
     const facultadRelId = await createFacultadOrigen(buildFacultadBody(leadId, facultadId), token);
     console.log(`   ✅ Facultad creada: ${facultadRelId ?? "(sin facultad)"}`);
 
+    console.log("   Creando Origen del Cliente Potencial...");
+    const origenId = await createOrigenClientePotencial(buildOrigenBody(payload, leadId, areaId, carreraId), token);
+    console.log(`   ✅ Origen creado: ${origenId ?? "(error)"}`);
+
     console.log("\n============================================================");
     console.log("🎉 PROCESO COMPLETADO EXITOSAMENTE");
     console.log(`   Lead      : ${leadAction === "created" ? "✅ CREADO" : "🔄 ACTUALIZADO"} → ${leadId}`);
     console.log(`   Interés   : ${interesId    ?? "(no creado)"}`);
     console.log(`   Relación  : ${relacionId   ?? "(no creado)"}`);
     console.log(`   Facultad  : ${facultadRelId ?? "(no creado)"}`);
+    console.log(`   Origen    : ${origenId      ?? "(no creado)"}`);
     console.log("============================================================\n");
 
   } catch (err) {
