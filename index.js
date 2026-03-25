@@ -273,7 +273,6 @@ function mapVarsToPayload(vars, meta) {
   else        console.log("   ⚠️  No se encontró URL de UTMs en ninguna variable conocida");
 
   const utms = parseUTMs(utmUrl);
-
   const descParts = [vars["Consulta"], vars["ReferralURL"]].filter(Boolean);
 
   return {
@@ -298,7 +297,6 @@ function mapVarsToPayload(vars, meta) {
     new_campaignid:          utms.campaign_id  || vars["campaign_id"]  || null,
     new_sourceid:            vars["source_id"] || null,
     description:             descParts.length > 0 ? descParts.join("\n") : null,
-    // Para org_origen
     new_tema:                vars["ProgramaSeleccionado"] || null,
     new_consulta:            vars["Consulta"] || null,
   };
@@ -340,7 +338,7 @@ function buildLeadBody(payload, existing = null) {
     firstname:              payload.firstname.trim(),
     emailaddress1:          payload.emailaddress1.trim(),
     new_interesadoposgrado: true,
-    initialcommunication:   1,
+    initialcommunication:   0,
     new_detalleorigen:      "Bot",
   };
 
@@ -352,15 +350,15 @@ function buildLeadBody(payload, existing = null) {
   }
 
   if (payload.new_origencandidato) body.new_origencandidato = payload.new_origencandidato;
-  if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
-  if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
-  if (payload.new_utm_campaign)  body.new_utm_campaign  = payload.new_utm_campaign;
-  if (payload.new_utm_term)      body.new_utm_term      = payload.new_utm_term;
-  if (payload.new_utm_content)   body.new_utm_content   = payload.new_utm_content;
-  if (payload.new_googleclickid) body.new_googleclickid = payload.new_googleclickid;
-  if (payload.new_campaignid)    body.new_campaignid    = payload.new_campaignid;
-  if (payload.new_sourceid)      body.new_sourceid      = payload.new_sourceid;
-  if (payload.description)       body.description       = payload.description;
+  if (payload.new_utm_source)      body.new_utm_source      = payload.new_utm_source;
+  if (payload.new_utm_medium)      body.new_utm_medium      = payload.new_utm_medium;
+  if (payload.new_utm_campaign)    body.new_utm_campaign    = payload.new_utm_campaign;
+  if (payload.new_utm_term)        body.new_utm_term        = payload.new_utm_term;
+  if (payload.new_utm_content)     body.new_utm_content     = payload.new_utm_content;
+  if (payload.new_googleclickid)   body.new_googleclickid   = payload.new_googleclickid;
+  if (payload.new_campaignid)      body.new_campaignid      = payload.new_campaignid;
+  if (payload.new_sourceid)        body.new_sourceid        = payload.new_sourceid;
+  if (payload.description)         body.description         = payload.description;
 
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
@@ -388,29 +386,19 @@ function buildFacultadBody(leadId, facultadId) {
   return body;
 }
 
-// ─── Body Origen del Cliente Potencial (org_origen) ───────────────────────────
+// ─── ✅ Body Origen del Cliente Potencial (org_origen) ────────────────────────
 function buildOrigenBody(payload, leadId, areaId, carreraId) {
   const body = {
     subject: "Bot WhatsApp",
-    // Referente a → el lead
     "regardingobjectid_lead@odata.bind": `/leads(${leadId})`,
-    // Cliente Potencial
-    "new_clientepotencial@odata.bind": `/leads(${leadId})`,
   };
 
-  // Tema → programa seleccionado
-  if (payload.new_tema)    body.new_tema    = payload.new_tema;
-
-  // Consulta → description
+  if (payload.new_tema)     body.new_tema    = payload.new_tema;
   if (payload.new_consulta) body.description = payload.new_consulta;
 
-  // Área de Interés
-  if (areaId)    body["new_areadeinteresid@odata.bind"]    = `/new_intereses(${areaId})`;
-
-  // Programa de Interés
+  if (areaId)    body["new_areadeinteresid@odata.bind"]     = `/new_intereses(${areaId})`;
   if (carreraId) body["new_programadeinteresid@odata.bind"] = `/new_carreras(${carreraId})`;
 
-  // UTMs
   if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
   if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
   if (payload.new_utm_campaign)  body.new_utm_campaign  = payload.new_utm_campaign;
