@@ -239,16 +239,15 @@ async function findCarreraIdByName(name, token) {
 
 // ─── Mapear variables al formato interno ─────────────────────────────────────
 function mapVarsToPayload(vars, meta) {
-  // ✅ FIX: capitalización consistente para que el teléfono se tome de meta.contactId
+  // ✅ capitalización consistente para que el teléfono se tome de meta.contactId
   const canal = "WhatsApp";
-  const origen = "Bot";
   const telefono = canal === "WhatsApp"
     ? meta.contactId
     : vars["Telefono"] || vars["Teléfono"] || null;
 
   const programaBot = vars["ProgramaSeleccionado"] || vars["Programa ID"] || vars["ProgramaID"] || vars["Programa Seleccionado"] || null;
 
-  // ✅ FIX: búsqueda robusta de la URL con UTMs (múltiples nombres posibles)
+  // ✅ búsqueda robusta de la URL con UTMs (múltiples nombres posibles)
   const utmUrl = vars["UTM"] || vars["utm"] || vars["URL"] || vars["url"]
                || vars["landing_url"] || vars["UTM_URL"] || vars["Url"] || null;
 
@@ -265,7 +264,6 @@ function mapVarsToPayload(vars, meta) {
     canal,
     new_areadeinteresnombre: vars["Area"] || vars["Area ID"] || vars["AreaID"] || null,
     new_programanombre:      mapProgramaNombre(programaBot),
-    new_origen:              origen,
     new_origencandidato:     26,
     new_utm_source:          utms.utm_source   || vars["utm_source"]   || null,
     new_utm_medium:          utms.utm_medium   || vars["utm_medium"]   || null,
@@ -316,7 +314,7 @@ function buildLeadBody(payload, existing = null) {
     emailaddress1: payload.emailaddress1.trim(),
   };
 
-  if (payload.lastname?.trim())  body.lastname = payload.lastname.trim();
+  if (payload.lastname?.trim()) body.lastname = payload.lastname.trim();
 
   // Teléfono: solo si el lead existente no tiene uno
   if (payload.mobilephone) {
@@ -324,11 +322,10 @@ function buildLeadBody(payload, existing = null) {
     if (!existing?.mobilephone) body.mobilephone = cleaned;
   }
 
-  // Origen
+  // Origen candidato (26 = WhatsApp)
   if (payload.new_origencandidato) body.new_origencandidato = payload.new_origencandidato;
-  if (payload.new_origen)          body.new_origen          = payload.new_origen;
 
-  // ✅ FIX: UTMs ahora se incluyen en el body que va al CRM
+  // ✅ UTMs
   if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
   if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
   if (payload.new_utm_campaign)  body.new_utm_campaign  = payload.new_utm_campaign;
@@ -338,7 +335,7 @@ function buildLeadBody(payload, existing = null) {
   if (payload.new_campaignid)    body.new_campaignid    = payload.new_campaignid;
   if (payload.new_sourceid)      body.new_sourceid      = payload.new_sourceid;
 
-  // ✅ FIX: Consulta ahora se incluye
+  // Consulta
   if (payload.description) body.description = payload.description;
 
   // Owner
@@ -507,7 +504,7 @@ app.post("/webhook/botmaker", async (req, res) => {
   Object.assign(session.vars, newVars);
   scheduleCleanup(sessionId);
 
-  // 🔍 DEBUG UTMs — muestra todas las keys recibidas para identificar el nombre correcto
+  // 🔍 DEBUG — muestra todas las keys recibidas para identificar nombres de variables
   console.log("\n🔍 [DEBUG] Keys acumuladas en sesión:");
   Object.entries(session.vars).forEach(([k, v]) => console.log(`   "${k}": ${v}`));
 
