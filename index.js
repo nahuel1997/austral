@@ -237,17 +237,17 @@ async function findCarreraIdByName(name, token) {
   }
 }
 
-// ─── Buscar GUID de facultad de origen por nombre ────────────────────────────
+// ─── ✅ Buscar GUID de business unit (Facultad) por nombre ───────────────────
 async function findFacultadIdByName(name, token) {
   if (!name?.trim()) { console.log("   ⚠️  Facultad no enviada"); return null; }
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) {
     console.log(`   ✅ Facultad ya es GUID: ${name}`); return name;
   }
-  console.log(`   🔍 Buscando facultad por nombre: "${name}"`);
+  console.log(`   🔍 Buscando facultad (business unit) por nombre: "${name}"`);
   try {
-    const url = `${CRM_BASE_URL}/new_facultaddeorigens?$filter=new_name eq '${encodeURIComponent(name)}'&$select=new_facultaddeorigenid&$top=1`;
+    const url = `${CRM_BASE_URL}/businessunits?$filter=name eq '${encodeURIComponent(name)}'&$select=businessunitid,name&$top=1`;
     const { data } = await axios.get(url, { headers: crmHeaders(token) });
-    const id = data.value?.[0]?.new_facultaddeorigenid ?? null;
+    const id = data.value?.[0]?.businessunitid ?? null;
     if (id) console.log(`   ✅ Facultad encontrada → ID: ${id}`);
     else    console.log(`   ❌ Facultad "${name}" no encontrada en CRM`);
     return id;
@@ -285,7 +285,7 @@ function mapVarsToPayload(vars, meta) {
     new_facultadnombre:      vars["Facultad"] || null,
     new_origencandidato:     26,
     new_interesadoposgrado:  true,
-    initialcommunication:    1,        // ✅ 1 = Sin contacto
+    initialcommunication:    1,
     new_detalleorigen:       "Bot",
     new_utm_source:          utms.utm_source   || vars["utm_source"]   || null,
     new_utm_medium:          utms.utm_medium   || vars["utm_medium"]   || null,
@@ -296,7 +296,7 @@ function mapVarsToPayload(vars, meta) {
     new_campaignid:          utms.campaign_id  || vars["campaign_id"]  || null,
     new_sourceid:            vars["source_id"] || null,
     new_tema:                vars["ProgramaSeleccionado"] || null,
-    new_consulta:            vars["ReferralURL"] || null,  // ✅ ReferralURL va en consulta del origen
+    new_consulta:            vars["ReferralURL"] || null,
   };
 }
 
@@ -336,7 +336,7 @@ function buildLeadBody(payload, existing = null) {
     firstname:              payload.firstname.trim(),
     emailaddress1:          payload.emailaddress1.trim(),
     new_interesadoposgrado: true,
-    initialcommunication:   1,        // ✅ 1 = Sin contacto
+    initialcommunication:   1,
     new_detalleorigen:      "Bot",
   };
 
@@ -377,9 +377,12 @@ function buildRelacionCarreraBody(payload, leadId, carreraId) {
   return body;
 }
 
+// ─── ✅ Body Facultad de Origen usando businessunit ───────────────────────────
 function buildFacultadBody(leadId, facultadId) {
-  const body = { "new_clientepotencial@odata.bind": `/leads(${leadId})` };
-  if (facultadId) body["new_facultaddeorigen@odata.bind"] = `/new_facultaddeorigens(${facultadId})`;
+  const body = {
+    "new_clientepotencial@odata.bind": `/leads(${leadId})`,
+  };
+  if (facultadId) body["new_unidaddenegocio@odata.bind"] = `/businessunits(${facultadId})`;
   return body;
 }
 
@@ -392,7 +395,7 @@ function buildOrigenBody(payload, leadId, areaId, carreraId) {
   };
 
   if (payload.new_tema)     body.new_tema    = payload.new_tema;
-  if (payload.new_consulta) body.description = payload.new_consulta;  // ✅ ReferralURL
+  if (payload.new_consulta) body.description = payload.new_consulta;
 
   if (areaId)    body["new_AreadeInteresId_org_origen@odata.bind"]     = `/new_intereses(${areaId})`;
   if (carreraId) body["new_ProgramadeInteresId_org_origen@odata.bind"] = `/new_carreras(${carreraId})`;
