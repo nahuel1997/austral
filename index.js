@@ -256,8 +256,8 @@ function mapVarsToPayload(vars, meta) {
     canal,
     new_areadeinteresnombre: vars["Area"] || vars["Area ID"] || vars["AreaID"] || null,
     new_programanombre:      mapProgramaNombre(programaBot),
-    new_origen:             origen,
-    new_origencandidato:     canal ,
+new_origen:          100000001,   // reemplazá con el valor real de "Bot"
+new_origencandidato: 100000002,   // reemplazá con el valor real de "Whatsapp"
     new_utm_source:          utms.utm_source   || vars["utm_source"]   || null,
     new_utm_medium:          utms.utm_medium   || vars["utm_medium"]   || null,
     new_utm_campaign:        utms.utm_campaign || vars["utm_campaign"] || null,
