@@ -239,7 +239,6 @@ async function findCarreraIdByName(name, token) {
 
 // ─── Mapear variables al formato interno ─────────────────────────────────────
 function mapVarsToPayload(vars, meta) {
-  // ✅ capitalización consistente para que el teléfono se tome de meta.contactId
   const canal = "WhatsApp";
   const telefono = canal === "WhatsApp"
     ? meta.contactId
@@ -247,7 +246,6 @@ function mapVarsToPayload(vars, meta) {
 
   const programaBot = vars["ProgramaSeleccionado"] || vars["Programa ID"] || vars["ProgramaID"] || vars["Programa Seleccionado"] || null;
 
-  // ✅ búsqueda robusta de la URL con UTMs (múltiples nombres posibles)
   const utmUrl = vars["UTM"] || vars["utm"] || vars["URL"] || vars["url"]
                || vars["landing_url"] || vars["UTM_URL"] || vars["Url"] || null;
 
@@ -257,23 +255,25 @@ function mapVarsToPayload(vars, meta) {
   const utms = parseUTMs(utmUrl);
 
   return {
-    firstname:               vars["Nombre"]         || null,
-    lastname:                vars["Apellido"]        || null,
-    emailaddress1:           vars["Mail"] || vars["Email"] || null,
-    mobilephone:             telefono,
+    firstname:                vars["Nombre"]         || null,
+    lastname:                 vars["Apellido"]        || null,
+    emailaddress1:            vars["Mail"] || vars["Email"] || null,
+    mobilephone:              telefono,
     canal,
-    new_areadeinteresnombre: vars["Area"] || vars["Area ID"] || vars["AreaID"] || null,
-    new_programanombre:      mapProgramaNombre(programaBot),
-    new_origencandidato:     26,
-    new_utm_source:          utms.utm_source   || vars["utm_source"]   || null,
-    new_utm_medium:          utms.utm_medium   || vars["utm_medium"]   || null,
-    new_utm_campaign:        utms.utm_campaign || vars["utm_campaign"] || null,
-    new_utm_term:            utms.utm_term     || vars["utm_term"]     || null,
-    new_utm_content:         utms.utm_content  || vars["utm_content"]  || null,
-    new_googleclickid:       utms.gclid        || vars["gclid"]        || null,
-    new_campaignid:          utms.campaign_id  || vars["campaign_id"]  || null,
-    new_sourceid:            vars["source_id"] || null,
-    description:             vars["Consulta"]  || null,
+    new_areadeinteresnombre:  vars["Area"] || vars["Area ID"] || vars["AreaID"] || null,
+    new_programanombre:       mapProgramaNombre(programaBot),
+    new_origencandidato:      26,          // WhatsApp
+    new_interesadoposgrado:   true,        // ✅ Interesado Posgrado → siempre true
+    initialcommunication:     0,           // ✅ Comunicación inicial → 0 = Contactado
+    new_utm_source:           utms.utm_source   || vars["utm_source"]   || null,
+    new_utm_medium:           utms.utm_medium   || vars["utm_medium"]   || null,
+    new_utm_campaign:         utms.utm_campaign || vars["utm_campaign"] || null,
+    new_utm_term:             utms.utm_term     || vars["utm_term"]     || null,
+    new_utm_content:          utms.utm_content  || vars["utm_content"]  || null,
+    new_googleclickid:        utms.gclid        || vars["gclid"]        || null,
+    new_campaignid:           utms.campaign_id  || vars["campaign_id"]  || null,
+    new_sourceid:             vars["source_id"] || null,
+    description:              vars["Consulta"]  || null,
   };
 }
 
@@ -310,22 +310,21 @@ async function findLeadByEmail(email, token) {
 // ─── Construir bodies CRM ─────────────────────────────────────────────────────
 function buildLeadBody(payload, existing = null) {
   const body = {
-    firstname:     payload.firstname.trim(),
-    emailaddress1: payload.emailaddress1.trim(),
+    firstname:               payload.firstname.trim(),
+    emailaddress1:           payload.emailaddress1.trim(),
+    new_interesadoposgrado:  true,   // ✅ siempre true
+    initialcommunication:    0,      // ✅ 0 = Contactado
   };
 
   if (payload.lastname?.trim()) body.lastname = payload.lastname.trim();
 
-  // Teléfono: solo si el lead existente no tiene uno
   if (payload.mobilephone) {
     const cleaned = payload.mobilephone.replace(/[\s\-()]/g, "");
     if (!existing?.mobilephone) body.mobilephone = cleaned;
   }
 
-  // Origen candidato (26 = WhatsApp)
   if (payload.new_origencandidato) body.new_origencandidato = payload.new_origencandidato;
 
-  // ✅ UTMs
   if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
   if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
   if (payload.new_utm_campaign)  body.new_utm_campaign  = payload.new_utm_campaign;
@@ -335,10 +334,8 @@ function buildLeadBody(payload, existing = null) {
   if (payload.new_campaignid)    body.new_campaignid    = payload.new_campaignid;
   if (payload.new_sourceid)      body.new_sourceid      = payload.new_sourceid;
 
-  // Consulta
   if (payload.description) body.description = payload.description;
 
-  // Owner
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
     body["ownerid@odata.bind"] = `/${entity}(${payload.ownerid})`;
@@ -393,20 +390,22 @@ async function processSession(sessionId) {
 
   console.log("\n------------------------------------------------------------");
   console.log("📋 DATOS FINALES DEL BOT:");
-  console.log(`   Nombre    : ${payload.firstname} ${payload.lastname ?? ""}`);
-  console.log(`   Email     : ${payload.emailaddress1}`);
-  console.log(`   Teléfono  : ${payload.mobilephone        ?? "(no enviado)"}`);
-  console.log(`   Canal     : ${payload.canal}`);
-  console.log(`   Área      : ${payload.new_areadeinteresnombre ?? "(no enviado)"}`);
-  console.log(`   Programa  : ${payload.new_programanombre      ?? "(no enviado)"}`);
-  console.log(`   UTM Source: ${payload.new_utm_source          ?? "-"}`);
-  console.log(`   UTM Medium: ${payload.new_utm_medium          ?? "-"}`);
-  console.log(`   UTM Camp. : ${payload.new_utm_campaign        ?? "-"}`);
-  console.log(`   UTM Term  : ${payload.new_utm_term            ?? "-"}`);
-  console.log(`   UTM Cont. : ${payload.new_utm_content         ?? "-"}`);
-  console.log(`   GCLID     : ${payload.new_googleclickid       ?? "-"}`);
-  console.log(`   Campaign ID: ${payload.new_campaignid         ?? "-"}`);
-  console.log(`   Consulta  : ${payload.description ? payload.description.slice(0, 80) + "..." : "(vacía)"}`);
+  console.log(`   Nombre              : ${payload.firstname} ${payload.lastname ?? ""}`);
+  console.log(`   Email               : ${payload.emailaddress1}`);
+  console.log(`   Teléfono            : ${payload.mobilephone        ?? "(no enviado)"}`);
+  console.log(`   Canal               : ${payload.canal}`);
+  console.log(`   Área                : ${payload.new_areadeinteresnombre ?? "(no enviado)"}`);
+  console.log(`   Programa            : ${payload.new_programanombre      ?? "(no enviado)"}`);
+  console.log(`   Interesado Posgrado : ${payload.new_interesadoposgrado}`);
+  console.log(`   Comunicación inicial: ${payload.initialcommunication} (Contactado)`);
+  console.log(`   UTM Source          : ${payload.new_utm_source          ?? "-"}`);
+  console.log(`   UTM Medium          : ${payload.new_utm_medium          ?? "-"}`);
+  console.log(`   UTM Camp.           : ${payload.new_utm_campaign        ?? "-"}`);
+  console.log(`   UTM Term            : ${payload.new_utm_term            ?? "-"}`);
+  console.log(`   UTM Cont.           : ${payload.new_utm_content         ?? "-"}`);
+  console.log(`   GCLID               : ${payload.new_googleclickid       ?? "-"}`);
+  console.log(`   Campaign ID         : ${payload.new_campaignid          ?? "-"}`);
+  console.log(`   Consulta            : ${payload.description ? payload.description.slice(0, 80) + "..." : "(vacía)"}`);
   console.log("------------------------------------------------------------");
 
   const errors = validatePayload(payload);
@@ -436,7 +435,7 @@ async function processSession(sessionId) {
 
     if (existingLead) {
       leadId = existingLead.leadid;
-      console.log(`   ⚠️  Lead YA EXISTE (ID: ${leadId}) → actualizando campos vacíos`);
+      console.log(`   ⚠️  Lead YA EXISTE (ID: ${leadId}) → actualizando campos`);
       await updateLead(leadId, buildLeadBody(payload, existingLead), token);
       leadAction = "updated";
     } else {
@@ -481,7 +480,6 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log(`   IP origen  : ${req.ip}`);
   console.log("============================================================");
 
-  // Validar token
   if (WEBHOOK_SECRET && req.headers["auth-bm-token"] !== WEBHOOK_SECRET) {
     console.error("❌ [AUTH] Token inválido – solicitud rechazada");
     return res.status(401).json({ ok: false, error: "Token inválido" });
@@ -504,7 +502,6 @@ app.post("/webhook/botmaker", async (req, res) => {
   Object.assign(session.vars, newVars);
   scheduleCleanup(sessionId);
 
-  // 🔍 DEBUG — muestra todas las keys recibidas para identificar nombres de variables
   console.log("\n🔍 [DEBUG] Keys acumuladas en sesión:");
   Object.entries(session.vars).forEach(([k, v]) => console.log(`   "${k}": ${v}`));
 
