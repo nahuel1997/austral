@@ -390,15 +390,15 @@ function buildFacultadBody(leadId, facultadId) {
 function buildOrigenBody(payload, leadId, areaId, carreraId) {
   const body = {
     subject: "Bot WhatsApp",
-    "regardingobjectid_lead@odata.bind": `/leads(${leadId})`,
-    "new_clientepotencial@odata.bind":   `/leads(${leadId})`,
+    "regardingobjectid_lead_org_origen@odata.bind":  `/leads(${leadId})`,
+    "new_clientepotencial_org_origen@odata.bind":    `/leads(${leadId})`,
   };
 
   if (payload.new_tema)     body.new_tema    = payload.new_tema;
   if (payload.new_consulta) body.description = payload.new_consulta;
 
-  if (areaId)    body["new_areadeinteresid@odata.bind"]     = `/new_intereses(${areaId})`;
-  if (carreraId) body["new_programadeinteresid@odata.bind"] = `/new_carreras(${carreraId})`;
+  if (areaId)    body["new_AreadeInteresId_org_origen@odata.bind"]    = `/new_intereses(${areaId})`;
+  if (carreraId) body["new_ProgramadeInteresId_org_origen@odata.bind"] = `/new_carreras(${carreraId})`;
 
   if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
   if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
