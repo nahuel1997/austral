@@ -273,7 +273,6 @@ function mapVarsToPayload(vars, meta) {
   else        console.log("   ⚠️  No se encontró URL de UTMs en ninguna variable conocida");
 
   const utms = parseUTMs(utmUrl);
-  const descParts = [vars["Consulta"], vars["ReferralURL"]].filter(Boolean);
 
   return {
     firstname:               vars["Nombre"]         || null,
@@ -286,7 +285,7 @@ function mapVarsToPayload(vars, meta) {
     new_facultadnombre:      vars["Facultad"] || null,
     new_origencandidato:     26,
     new_interesadoposgrado:  true,
-    initialcommunication:    0,
+    initialcommunication:    1,        // ✅ 1 = Sin contacto
     new_detalleorigen:       "Bot",
     new_utm_source:          utms.utm_source   || vars["utm_source"]   || null,
     new_utm_medium:          utms.utm_medium   || vars["utm_medium"]   || null,
@@ -296,9 +295,8 @@ function mapVarsToPayload(vars, meta) {
     new_googleclickid:       utms.gclid        || vars["gclid"]        || null,
     new_campaignid:          utms.campaign_id  || vars["campaign_id"]  || null,
     new_sourceid:            vars["source_id"] || null,
-    description:             descParts.length > 0 ? descParts.join("\n") : null,
     new_tema:                vars["ProgramaSeleccionado"] || null,
-    new_consulta:            vars["Consulta"] || null,
+    new_consulta:            vars["ReferralURL"] || null,  // ✅ ReferralURL va en consulta del origen
   };
 }
 
@@ -338,7 +336,7 @@ function buildLeadBody(payload, existing = null) {
     firstname:              payload.firstname.trim(),
     emailaddress1:          payload.emailaddress1.trim(),
     new_interesadoposgrado: true,
-    initialcommunication:   0,
+    initialcommunication:   1,        // ✅ 1 = Sin contacto
     new_detalleorigen:      "Bot",
   };
 
@@ -358,7 +356,6 @@ function buildLeadBody(payload, existing = null) {
   if (payload.new_googleclickid)   body.new_googleclickid   = payload.new_googleclickid;
   if (payload.new_campaignid)      body.new_campaignid      = payload.new_campaignid;
   if (payload.new_sourceid)        body.new_sourceid        = payload.new_sourceid;
-  if (payload.description)         body.description         = payload.description;
 
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
@@ -386,18 +383,18 @@ function buildFacultadBody(leadId, facultadId) {
   return body;
 }
 
-// ─── ✅ Body Origen del Cliente Potencial (org_origen) ────────────────────────
+// ─── Body Origen del Cliente Potencial (org_origen) ───────────────────────────
 function buildOrigenBody(payload, leadId, areaId, carreraId) {
   const body = {
     subject: "Bot WhatsApp",
-    "regardingobjectid_lead_org_origen@odata.bind":  `/leads(${leadId})`,
-    "new_clientepotencial_org_origen@odata.bind":    `/leads(${leadId})`,
+    "regardingobjectid_lead_org_origen@odata.bind": `/leads(${leadId})`,
+    "new_clientepotencial_org_origen@odata.bind":   `/leads(${leadId})`,
   };
 
   if (payload.new_tema)     body.new_tema    = payload.new_tema;
-  if (payload.new_consulta) body.description = payload.new_consulta;
+  if (payload.new_consulta) body.description = payload.new_consulta;  // ✅ ReferralURL
 
-  if (areaId)    body["new_AreadeInteresId_org_origen@odata.bind"]    = `/new_intereses(${areaId})`;
+  if (areaId)    body["new_AreadeInteresId_org_origen@odata.bind"]     = `/new_intereses(${areaId})`;
   if (carreraId) body["new_ProgramadeInteresId_org_origen@odata.bind"] = `/new_carreras(${carreraId})`;
 
   if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
@@ -464,7 +461,7 @@ async function processSession(sessionId) {
   console.log(`   Programa            : ${payload.new_programanombre      ?? "(no enviado)"}`);
   console.log(`   Facultad            : ${payload.new_facultadnombre      ?? "(no enviado)"}`);
   console.log(`   Interesado Posgrado : ${payload.new_interesadoposgrado}`);
-  console.log(`   Comunicación inicial: ${payload.initialcommunication} (Contactado)`);
+  console.log(`   Comunicación inicial: ${payload.initialcommunication} (Sin contacto)`);
   console.log(`   Detalle origen      : ${payload.new_detalleorigen}`);
   console.log(`   UTM Source          : ${payload.new_utm_source          ?? "-"}`);
   console.log(`   UTM Medium          : ${payload.new_utm_medium          ?? "-"}`);
@@ -473,7 +470,7 @@ async function processSession(sessionId) {
   console.log(`   UTM Cont.           : ${payload.new_utm_content         ?? "-"}`);
   console.log(`   GCLID               : ${payload.new_googleclickid       ?? "-"}`);
   console.log(`   Campaign ID         : ${payload.new_campaignid          ?? "-"}`);
-  console.log(`   Description         : ${payload.description ? payload.description.slice(0, 100) + "..." : "(vacía)"}`);
+  console.log(`   ReferralURL         : ${payload.new_consulta            ?? "-"}`);
   console.log("------------------------------------------------------------");
 
   const errors = validatePayload(payload);
