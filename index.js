@@ -57,6 +57,9 @@ function hasRequiredVars(vars) {
   return REQUIRED_VARS.every(k => vars[k]?.trim());
 }
 
+// ─── GUID fijo del registro BOT en new_origen ────────────────────────────────
+const ORIGEN_BOT_GUID = "4ed973c6-b5bc-ef11-a72e-002248dfb239";
+
 // ─── Mapper: Nombre Botmaker → Nombre CRM ────────────────────────────────────
 const PROGRAMA_MAPPER = {
   "Doctorado en Derecho": "Doctorado en Derecho (Sede Buenos Aires)",
@@ -377,7 +380,6 @@ function buildRelacionCarreraBody(payload, leadId, carreraId) {
   return body;
 }
 
-// ─── ✅ Body Facultad de Origen con new_name ──────────────────────────────────
 function buildFacultadBody(leadId, facultadId, facultadNombre) {
   const body = {
     "new_clientepotencial@odata.bind": `/leads(${leadId})`,
@@ -387,12 +389,13 @@ function buildFacultadBody(leadId, facultadId, facultadNombre) {
   return body;
 }
 
-// ─── Body Origen del Cliente Potencial (org_origen) ───────────────────────────
+// ─── ✅ Body Origen del Cliente Potencial (org_origen) con BOT ─────────────────
 function buildOrigenBody(payload, leadId, areaId, carreraId) {
   const body = {
     subject: "Bot WhatsApp",
     "regardingobjectid_lead_org_origen@odata.bind": `/leads(${leadId})`,
     "new_clientepotencial_org_origen@odata.bind":   `/leads(${leadId})`,
+    "new_origen_org_origen@odata.bind":             `/new_origens(${ORIGEN_BOT_GUID})`,
   };
 
   if (payload.new_tema)     body.new_tema    = payload.new_tema;
@@ -467,6 +470,7 @@ async function processSession(sessionId) {
   console.log(`   Interesado Posgrado : ${payload.new_interesadoposgrado}`);
   console.log(`   Comunicación inicial: ${payload.initialcommunication} (Sin contacto)`);
   console.log(`   Detalle origen      : ${payload.new_detalleorigen}`);
+  console.log(`   Origen (BOT)        : ${ORIGEN_BOT_GUID}`);
   console.log(`   UTM Source          : ${payload.new_utm_source          ?? "-"}`);
   console.log(`   UTM Medium          : ${payload.new_utm_medium          ?? "-"}`);
   console.log(`   UTM Camp.           : ${payload.new_utm_campaign        ?? "-"}`);
