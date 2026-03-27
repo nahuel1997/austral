@@ -260,11 +260,50 @@ async function findFacultadIdByName(name, token) {
   }
 }
 
+// ─── Buscar GUID de Campaña (campaign) por nombre ────────────────────────────
+async function findCampanaIdByName(name, token) {
+  if (!name?.trim()) { console.log("   ⚠️  Campaña no enviada"); return null; }
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) {
+    console.log(`   ✅ Campaña ya es GUID: ${name}`); return name;
+  }
+  console.log(`   🔍 Buscando campaña por nombre: "${name}"`);
+  try {
+    const url = `${CRM_BASE_URL}/campaigns?$filter=name eq '${encodeURIComponent(name)}'&$select=campaignid&$top=1`;
+    const { data } = await axios.get(url, { headers: crmHeaders(token) });
+    const id = data.value?.[0]?.campaignid ?? null;
+    if (id) console.log(`   ✅ Campaña encontrada → ID: ${id}`);
+    else    console.log(`   ❌ Campaña "${name}" no encontrada en CRM`);
+    return id;
+  } catch (e) {
+    console.error(`   💥 Error buscando campaña:`, e.response?.data ?? e.message);
+    return null;
+  }
+}
+
+// ─── Buscar GUID de Actividad de Campaña (campaignactivity) por subject ──────
+async function findActividadCampanaIdByName(name, token) {
+  if (!name?.trim()) { console.log("   ⚠️  Actividad de campaña no enviada"); return null; }
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) {
+    console.log(`   ✅ Actividad de campaña ya es GUID: ${name}`); return name;
+  }
+  console.log(`   🔍 Buscando actividad de campaña por nombre: "${name}"`);
+  try {
+    const url = `${CRM_BASE_URL}/campaignactivities?$filter=subject eq '${encodeURIComponent(name)}'&$select=activityid&$top=1`;
+    const { data } = await axios.get(url, { headers: crmHeaders(token) });
+    const id = data.value?.[0]?.activityid ?? null;
+    if (id) console.log(`   ✅ Actividad de campaña encontrada → ID: ${id}`);
+    else    console.log(`   ❌ Actividad de campaña "${name}" no encontrada en CRM`);
+    return id;
+  } catch (e) {
+    console.error(`   💥 Error buscando actividad de campaña:`, e.response?.data ?? e.message);
+    return null;
+  }
+}
+
 // ─── Mapear variables al formato interno ─────────────────────────────────────
 function mapVarsToPayload(vars, meta) {
-
- const canal = "WhatsApp";
-const telefono = vars["Telefono"] || vars["Teléfono"] || meta.contactId || null;
+  const canal = "WhatsApp";
+  const telefono = vars["Telefono"] || vars["Teléfono"] || meta.contactId || null;
 
   const programaBot = vars["ProgramaSeleccionado"] || vars["Programa ID"] || vars["ProgramaID"] || vars["Programa Seleccionado"] || null;
 
@@ -299,6 +338,9 @@ const telefono = vars["Telefono"] || vars["Teléfono"] || meta.contactId || null
     new_sourceid:            vars["source_id"] || null,
     new_tema:                vars["ProgramaSeleccionado"] || null,
     new_consulta:            vars["ReferralURL"] || null,
+    // ── Nuevos campos ──
+    new_campananombre:       vars["Campana"] || null,
+    new_actdecampananombre:  vars["ActividadCampana"] || null,
   };
 }
 
@@ -388,8 +430,8 @@ function buildFacultadBody(leadId, facultadId, facultadNombre) {
   return body;
 }
 
-// ─── ✅ Body Origen del Cliente Potencial (org_origen) con BOT ─────────────────
-function buildOrigenBody(payload, leadId, areaId, carreraId) {
+// ─── Body Origen del Cliente Potencial (org_origen) ──────────────────────────
+function buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, actividadCampanaId) {
   const body = {
     subject: "Bot WhatsApp",
     "regardingobjectid_lead_org_origen@odata.bind": `/leads(${leadId})`,
@@ -400,8 +442,10 @@ function buildOrigenBody(payload, leadId, areaId, carreraId) {
   if (payload.new_tema)     body.new_tema    = payload.new_tema;
   if (payload.new_consulta) body.description = payload.new_consulta;
 
-  if (areaId)    body["new_AreadeInteresId_org_origen@odata.bind"]     = `/new_intereses(${areaId})`;
-  if (carreraId) body["new_ProgramadeInteresId_org_origen@odata.bind"] = `/new_carreras(${carreraId})`;
+  if (areaId)              body["new_AreadeInteresId_org_origen@odata.bind"]     = `/new_intereses(${areaId})`;
+  if (carreraId)           body["new_ProgramadeInteresId_org_origen@odata.bind"] = `/new_carreras(${carreraId})`;
+  if (campanaId)           body["new_campanaid@odata.bind"]                      = `/campaigns(${campanaId})`;
+  if (actividadCampanaId)  body["new_actdecampanaid@odata.bind"]                 = `/campaignactivities(${actividadCampanaId})`;
 
   if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
   if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
@@ -466,6 +510,8 @@ async function processSession(sessionId) {
   console.log(`   Área                : ${payload.new_areadeinteresnombre ?? "(no enviado)"}`);
   console.log(`   Programa            : ${payload.new_programanombre      ?? "(no enviado)"}`);
   console.log(`   Facultad            : ${payload.new_facultadnombre      ?? "(no enviado)"}`);
+  console.log(`   Campaña             : ${payload.new_campananombre        ?? "(no enviado)"}`);
+  console.log(`   Act. Campaña        : ${payload.new_actdecampananombre   ?? "(no enviado)"}`);
   console.log(`   Interesado Posgrado : ${payload.new_interesadoposgrado}`);
   console.log(`   Comunicación inicial: ${payload.initialcommunication} (Sin contacto)`);
   console.log(`   Detalle origen      : ${payload.new_detalleorigen}`);
@@ -495,10 +541,12 @@ async function processSession(sessionId) {
     const token = await getCrmToken();
 
     console.log("\n------------------------------------------------------------");
-    console.log("🔍 BUSCANDO ÁREA, PROGRAMA Y FACULTAD EN CRM...");
-    const areaId     = await findAreaIdByName(payload.new_areadeinteresnombre, token);
-    const carreraId  = await findCarreraIdByName(payload.new_programanombre, token);
-    const facultadId = await findFacultadIdByName(payload.new_facultadnombre, token);
+    console.log("🔍 BUSCANDO REGISTROS EN CRM...");
+    const areaId            = await findAreaIdByName(payload.new_areadeinteresnombre, token);
+    const carreraId         = await findCarreraIdByName(payload.new_programanombre, token);
+    const facultadId        = await findFacultadIdByName(payload.new_facultadnombre, token);
+    const campanaId         = await findCampanaIdByName(payload.new_campananombre, token);
+    const actividadCampanaId = await findActividadCampanaIdByName(payload.new_actdecampananombre, token);
 
     console.log("\n------------------------------------------------------------");
     console.log(`🔍 Buscando Lead con email: ${payload.emailaddress1.trim()}`);
@@ -537,17 +585,19 @@ async function processSession(sessionId) {
 
     console.log("   Creando Origen del Cliente Potencial...");
     const origenId = await createOrigenClientePotencial(
-      buildOrigenBody(payload, leadId, areaId, carreraId), token
+      buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, actividadCampanaId), token
     );
     console.log(`   ✅ Origen creado: ${origenId ?? "(error)"}`);
 
     console.log("\n============================================================");
     console.log("🎉 PROCESO COMPLETADO EXITOSAMENTE");
     console.log(`   Lead      : ${leadAction === "created" ? "✅ CREADO" : "🔄 ACTUALIZADO"} → ${leadId}`);
-    console.log(`   Interés   : ${interesId    ?? "(no creado)"}`);
-    console.log(`   Relación  : ${relacionId   ?? "(no creado)"}`);
-    console.log(`   Facultad  : ${facultadRelId ?? "(no creado)"}`);
-    console.log(`   Origen    : ${origenId      ?? "(no creado)"}`);
+    console.log(`   Interés   : ${interesId         ?? "(no creado)"}`);
+    console.log(`   Relación  : ${relacionId        ?? "(no creado)"}`);
+    console.log(`   Facultad  : ${facultadRelId     ?? "(no creado)"}`);
+    console.log(`   Origen    : ${origenId          ?? "(no creado)"}`);
+    console.log(`   Campaña   : ${campanaId         ?? "(no enviada)"}`);
+    console.log(`   Act. Camp.: ${actividadCampanaId ?? "(no enviada)"}`);
     console.log("============================================================\n");
 
   } catch (err) {
