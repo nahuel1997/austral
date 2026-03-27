@@ -444,9 +444,8 @@ function buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, activida
 
   if (areaId)              body["new_AreadeInteresId_org_origen@odata.bind"]     = `/new_intereses(${areaId})`;
   if (carreraId)           body["new_ProgramadeInteresId_org_origen@odata.bind"] = `/new_carreras(${carreraId})`;
-  if (campanaId)           body["new_campanaid@odata.bind"]                      = `/campaigns(${campanaId})`;
-  if (actividadCampanaId)  body["new_actdecampanaid@odata.bind"]                 = `/campaignactivities(${actividadCampanaId})`;
-
+if (campanaId)          body["new_CampanaId@odata.bind"]       = `/campaigns(${campanaId})`;
+if (actividadCampanaId) body["new_ActdeCampanaId@odata.bind"]  = `/campaignactivities(${actividadCampanaId})`;
   if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
   if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
   if (payload.new_utm_campaign)  body.new_utm_campaign  = payload.new_utm_campaign;
