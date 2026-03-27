@@ -262,10 +262,9 @@ async function findFacultadIdByName(name, token) {
 
 // ─── Mapear variables al formato interno ─────────────────────────────────────
 function mapVarsToPayload(vars, meta) {
-  const canal = "WhatsApp";
-  const telefono = canal === "WhatsApp"
-    ? meta.contactId
-    : vars["Telefono"] || vars["Teléfono"] || null;
+
+ const canal = "WhatsApp";
+const telefono = vars["Telefono"] || vars["Teléfono"] || meta.contactId || null;
 
   const programaBot = vars["ProgramaSeleccionado"] || vars["Programa ID"] || vars["ProgramaID"] || vars["Programa Seleccionado"] || null;
 
