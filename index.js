@@ -60,6 +60,11 @@ function hasRequiredVars(vars) {
 // ─── GUID fijo del registro BOT en new_origen ────────────────────────────────
 const ORIGEN_BOT_GUID = "4ed973c6-b5bc-ef11-a72e-002248dfb239";
 
+// ─── Store URL-Tracking ───────────────────────────────────────────────────────
+// Map<codigo, { url, creadoEn, cleanupTimer }>
+const urlTrackingStore = new Map();
+const URL_TRACKING_TTL = 48 * 60 * 60 * 1000; // 48h
+
 // ─── Mapper: Nombre Botmaker → Nombre CRM ────────────────────────────────────
 const PROGRAMA_MAPPER = {
   "Doctorado en Derecho": "Doctorado en Derecho (Sede Buenos Aires)",
@@ -302,16 +307,37 @@ async function findActividadCampanaIdByName(name, token) {
 
 // ─── Mapear variables al formato interno ─────────────────────────────────────
 function mapVarsToPayload(vars, meta) {
-  const canal = "WhatsApp";
+  const canal    = "WhatsApp";
   const telefono = vars["Telefono"] || vars["Teléfono"] || meta.contactId || null;
 
-  const programaBot = vars["ProgramaSeleccionado"] || vars["Programa ID"] || vars["ProgramaID"] || vars["Programa Seleccionado"] || null;
+  const programaBot =
+    vars["ProgramaSeleccionado"] || vars["Programa ID"] ||
+    vars["ProgramaID"] || vars["Programa Seleccionado"] || null;
 
-  const utmUrl = vars["UTM"] || vars["utm"] || vars["URL"] || vars["url"]
-               || vars["landing_url"] || vars["UTM_URL"] || vars["Url"] || null;
+  // ── Resolución de URL: primero por código de vinculación, luego fallback ──
+  const codigoVinculacion =
+    vars["CodigoWA"] || vars["codigo_wa"] || vars["Codigo"] || null;
 
-  if (utmUrl) console.log(`   🔗 URL para UTMs encontrada en vars: ${utmUrl}`);
-  else        console.log("   ⚠️  No se encontró URL de UTMs en ninguna variable conocida");
+  let utmUrl = null;
+
+  if (codigoVinculacion) {
+    const tracked = urlTrackingStore.get(codigoVinculacion);
+    if (tracked) {
+      utmUrl = tracked.url;
+      console.log(`   🔗 URL recuperada por código "${codigoVinculacion}": ${utmUrl}`);
+    } else {
+      console.log(`   ⚠️  Código "${codigoVinculacion}" no encontrado en el store`);
+    }
+  }
+
+  // Fallback: variables de URL directas (comportamiento anterior)
+  if (!utmUrl) {
+    utmUrl =
+      vars["UTM"] || vars["utm"] || vars["URL"] || vars["url"] ||
+      vars["landing_url"] || vars["UTM_URL"] || vars["Url"] || null;
+    if (utmUrl) console.log(`   🔗 URL para UTMs encontrada en vars: ${utmUrl}`);
+    else        console.log("   ⚠️  No se encontró URL ni código de vinculación");
+  }
 
   const utms = parseUTMs(utmUrl);
 
@@ -337,7 +363,7 @@ function mapVarsToPayload(vars, meta) {
     new_campaignid:          utms.campaign_id  || vars["campaign_id"]  || null,
     new_sourceid:            vars["source_id"] || null,
     new_tema:                vars["ProgramaSeleccionado"] || null,
-    new_consulta:            vars["ReferralURL"] || null,
+    new_consulta:            vars["ReferralURL"] || utmUrl || null,
     // ── Nuevos campos ──
     new_campananombre:       vars["Campana"] || null,
     new_actdecampananombre:  vars["ActividadCampana"] || null,
@@ -442,10 +468,11 @@ function buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, activida
   if (payload.new_tema)     body.new_tema    = payload.new_tema;
   if (payload.new_consulta) body.description = payload.new_consulta;
 
-  if (areaId)              body["new_AreadeInteresId_org_origen@odata.bind"]     = `/new_intereses(${areaId})`;
-  if (carreraId)           body["new_ProgramadeInteresId_org_origen@odata.bind"] = `/new_carreras(${carreraId})`;
-if (campanaId)          body["new_CampanaId@odata.bind"]       = `/campaigns(${campanaId})`;
-if (actividadCampanaId) body["new_ActdeCampanaId@odata.bind"]  = `/campaignactivities(${actividadCampanaId})`;
+  if (areaId)    body["new_AreadeInteresId_org_origen@odata.bind"]     = `/new_intereses(${areaId})`;
+  if (carreraId) body["new_ProgramadeInteresId_org_origen@odata.bind"] = `/new_carreras(${carreraId})`;
+  if (campanaId)           body["new_CampanaId@odata.bind"]      = `/campaigns(${campanaId})`;
+  if (actividadCampanaId)  body["new_ActdeCampanaId@odata.bind"] = `/campaignactivities(${actividadCampanaId})`;
+
   if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
   if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
   if (payload.new_utm_campaign)  body.new_utm_campaign  = payload.new_utm_campaign;
@@ -541,10 +568,10 @@ async function processSession(sessionId) {
 
     console.log("\n------------------------------------------------------------");
     console.log("🔍 BUSCANDO REGISTROS EN CRM...");
-    const areaId            = await findAreaIdByName(payload.new_areadeinteresnombre, token);
-    const carreraId         = await findCarreraIdByName(payload.new_programanombre, token);
-    const facultadId        = await findFacultadIdByName(payload.new_facultadnombre, token);
-    const campanaId         = await findCampanaIdByName(payload.new_campananombre, token);
+    const areaId             = await findAreaIdByName(payload.new_areadeinteresnombre, token);
+    const carreraId          = await findCarreraIdByName(payload.new_programanombre, token);
+    const facultadId         = await findFacultadIdByName(payload.new_facultadnombre, token);
+    const campanaId          = await findCampanaIdByName(payload.new_campananombre, token);
     const actividadCampanaId = await findActividadCampanaIdByName(payload.new_actdecampananombre, token);
 
     console.log("\n------------------------------------------------------------");
@@ -609,6 +636,29 @@ async function processSession(sessionId) {
   }
 }
 
+// ─── URL Tracking: WordPress registra el URL al hacer clic en WA ─────────────
+app.post("/url-tracking", (req, res) => {
+  const { url, codigo } = req.body;
+
+  if (!url || !codigo) {
+    return res.status(400).json({ ok: false, error: "url y codigo son obligatorios" });
+  }
+
+  // Limpia timer anterior si el código ya existía
+  const existing = urlTrackingStore.get(codigo);
+  if (existing?.cleanupTimer) clearTimeout(existing.cleanupTimer);
+
+  const cleanupTimer = setTimeout(() => {
+    urlTrackingStore.delete(codigo);
+    console.log(`🧹 [URL-TRACKING] Código expirado: ${codigo}`);
+  }, URL_TRACKING_TTL);
+
+  urlTrackingStore.set(codigo, { url, creadoEn: new Date().toISOString(), cleanupTimer });
+  console.log(`✅ [URL-TRACKING] Guardado: ${codigo} → ${url}`);
+
+  return res.status(201).json({ ok: true, codigo });
+});
+
 // ─── Webhook principal ────────────────────────────────────────────────────────
 app.post("/webhook/botmaker", async (req, res) => {
   console.log("\n============================================================");
@@ -670,7 +720,11 @@ app.post("/webhook/botmaker", async (req, res) => {
 });
 
 // ─── Health check ─────────────────────────────────────────────────────────────
-app.get("/health", (_req, res) => res.json({ status: "ok", sessions: sessions.size }));
+app.get("/health", (_req, res) => res.json({
+  status:        "ok",
+  sessions:      sessions.size,
+  urlTracking:   urlTrackingStore.size,
+}));
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
@@ -679,5 +733,6 @@ app.listen(PORT, () => {
   console.log(`   CRM URL   : ${CRM_BASE_URL}`);
   console.log(`   Delay proc: ${PROCESS_DELAY / 1000}s`);
   console.log(`   TTL sesión: ${SESSION_TTL / 60000}min`);
+  console.log(`   TTL URL   : ${URL_TRACKING_TTL / 3600000}h`);
   console.log("============================================================");
 });
