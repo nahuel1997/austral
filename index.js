@@ -8,7 +8,17 @@ const express = require("express");
 const axios = require("axios");
 
 const app = express();
+// ─── CORS para /url-tracking (llamado desde el browser de WordPress) ──────────
+app.use("/url-tracking", (req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 app.use(express.json());
+
 
 const {
   CRM_BASE_URL, CRM_TOKEN_URL, CRM_CLIENT_ID,
@@ -471,7 +481,8 @@ function buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, activida
   if (areaId)    body["new_AreadeInteresId_org_origen@odata.bind"]     = `/new_intereses(${areaId})`;
   if (carreraId) body["new_ProgramadeInteresId_org_origen@odata.bind"] = `/new_carreras(${carreraId})`;
   if (campanaId)           body["new_CampanaId@odata.bind"]      = `/campaigns(${campanaId})`;
-  if (actividadCampanaId)  body["new_ActdeCampanaId@odata.bind"] = `/campaignactivities(${actividadCampanaId})`;
+  // ⚠️  PENDIENTE: confirmar nombre exacto del campo con admin de Dynamics
+  // if (actividadCampanaId)  body["new_ActdeCampanaId@odata.bind"] = `/campaignactivities(${actividadCampanaId})`;
 
   if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
   if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
