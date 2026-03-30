@@ -480,9 +480,9 @@ function buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, activida
 
   if (areaId)    body["new_AreadeInteresId_org_origen@odata.bind"]     = `/new_intereses(${areaId})`;
   if (carreraId) body["new_ProgramadeInteresId_org_origen@odata.bind"] = `/new_carreras(${carreraId})`;
-  if (campanaId)           body["new_CampanaId@odata.bind"]      = `/campaigns(${campanaId})`;
+  if (campanaId) body["new_CampanaId@odata.bind"] = `/campaigns(${campanaId})`;
   // ⚠️  PENDIENTE: confirmar nombre exacto del campo con admin de Dynamics
-  // if (actividadCampanaId)  body["new_ActdeCampanaId@odata.bind"] = `/campaignactivities(${actividadCampanaId})`;
+  // if (actividadCampanaId) body["new_ActdeCampanaId@odata.bind"] = `/campaignactivities(${actividadCampanaId})`;
 
   if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
   if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
@@ -603,36 +603,45 @@ async function processSession(sessionId) {
       console.log(`   ✅ Lead creado con ID: ${leadId}`);
     }
 
-    console.log("\n------------------------------------------------------------");
-    console.log("📎 CREANDO REGISTROS RELACIONADOS...");
+    // ─── Registros relacionados: solo si el lead es nuevo ────────────────────
+    let interesId = null, relacionId = null, facultadRelId = null, origenId = null;
 
-    console.log("   Creando Interés del contacto (área)...");
-    const interesId = await createInteresDelContacto(buildInteresBody(payload, leadId, areaId), token);
-    console.log(`   ✅ Interés creado: ${interesId ?? "(sin área)"}`);
+    if (leadAction === "created") {
+      console.log("\n------------------------------------------------------------");
+      console.log("📎 CREANDO REGISTROS RELACIONADOS (lead nuevo)...");
 
-    console.log("   Creando Relación cliente-carrera (programa)...");
-    const relacionId = await createRelacionCarrera(buildRelacionCarreraBody(payload, leadId, carreraId), token);
-    console.log(`   ✅ Relación creada: ${relacionId ?? "(sin programa)"}`);
+      console.log("   Creando Interés del contacto (área)...");
+      interesId = await createInteresDelContacto(buildInteresBody(payload, leadId, areaId), token);
+      console.log(`   ✅ Interés creado: ${interesId ?? "(sin área)"}`);
 
-    console.log("   Creando Facultad de Origen...");
-    const facultadRelId = await createFacultadOrigen(
-      buildFacultadBody(leadId, facultadId, payload.new_facultadnombre), token
-    );
-    console.log(`   ✅ Facultad creada: ${facultadRelId ?? "(sin facultad)"}`);
+      console.log("   Creando Relación cliente-carrera (programa)...");
+      relacionId = await createRelacionCarrera(buildRelacionCarreraBody(payload, leadId, carreraId), token);
+      console.log(`   ✅ Relación creada: ${relacionId ?? "(sin programa)"}`);
 
-    console.log("   Creando Origen del Cliente Potencial...");
-    const origenId = await createOrigenClientePotencial(
-      buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, actividadCampanaId), token
-    );
-    console.log(`   ✅ Origen creado: ${origenId ?? "(error)"}`);
+      console.log("   Creando Facultad de Origen...");
+      facultadRelId = await createFacultadOrigen(
+        buildFacultadBody(leadId, facultadId, payload.new_facultadnombre), token
+      );
+      console.log(`   ✅ Facultad creada: ${facultadRelId ?? "(sin facultad)"}`);
+
+      console.log("   Creando Origen del Cliente Potencial...");
+      origenId = await createOrigenClientePotencial(
+        buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, actividadCampanaId), token
+      );
+      console.log(`   ✅ Origen creado: ${origenId ?? "(error)"}`);
+
+    } else {
+      console.log("\n------------------------------------------------------------");
+      console.log("ℹ️  Lead existente — solo se actualizaron campos, sin duplicar registros relacionados");
+    }
 
     console.log("\n============================================================");
     console.log("🎉 PROCESO COMPLETADO EXITOSAMENTE");
     console.log(`   Lead      : ${leadAction === "created" ? "✅ CREADO" : "🔄 ACTUALIZADO"} → ${leadId}`);
-    console.log(`   Interés   : ${interesId         ?? "(no creado)"}`);
-    console.log(`   Relación  : ${relacionId        ?? "(no creado)"}`);
-    console.log(`   Facultad  : ${facultadRelId     ?? "(no creado)"}`);
-    console.log(`   Origen    : ${origenId          ?? "(no creado)"}`);
+    console.log(`   Interés   : ${interesId         ?? "(no aplica)"}`);
+    console.log(`   Relación  : ${relacionId        ?? "(no aplica)"}`);
+    console.log(`   Facultad  : ${facultadRelId     ?? "(no aplica)"}`);
+    console.log(`   Origen    : ${origenId          ?? "(no aplica)"}`);
     console.log(`   Campaña   : ${campanaId         ?? "(no enviada)"}`);
     console.log(`   Act. Camp.: ${actividadCampanaId ?? "(no enviada)"}`);
     console.log("============================================================\n");
@@ -655,7 +664,6 @@ app.post("/url-tracking", (req, res) => {
     return res.status(400).json({ ok: false, error: "url y codigo son obligatorios" });
   }
 
-  // Limpia timer anterior si el código ya existía
   const existing = urlTrackingStore.get(codigo);
   if (existing?.cleanupTimer) clearTimeout(existing.cleanupTimer);
 
@@ -730,11 +738,20 @@ app.post("/webhook/botmaker", async (req, res) => {
   return res.status(200).json({ ok: true, queued: true, vars: session.vars });
 });
 
+// ─── DEBUG: listar URL-Tracking store ────────────────────────────────────────
+app.get("/debug/url-tracking", (req, res) => {
+  const entries = {};
+  urlTrackingStore.forEach((val, key) => {
+    entries[key] = { url: val.url, creadoEn: val.creadoEn };
+  });
+  res.json({ total: urlTrackingStore.size, entries });
+});
+
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => res.json({
-  status:        "ok",
-  sessions:      sessions.size,
-  urlTracking:   urlTrackingStore.size,
+  status:      "ok",
+  sessions:    sessions.size,
+  urlTracking: urlTrackingStore.size,
 }));
 
 // ─── Start ────────────────────────────────────────────────────────────────────
