@@ -603,10 +603,11 @@ async function processSession(sessionId) {
       console.log(`   ✅ Lead creado con ID: ${leadId}`);
     }
 
-    // ─── Registros relacionados: solo si el lead es nuevo ────────────────────
+    // ─── Registros relacionados ───────────────────────────────────────────────
     let interesId = null, relacionId = null, facultadRelId = null, origenId = null;
 
     if (leadAction === "created") {
+      // ── Lead nuevo: crea todos los registros relacionados ──────────────────
       console.log("\n------------------------------------------------------------");
       console.log("📎 CREANDO REGISTROS RELACIONADOS (lead nuevo)...");
 
@@ -631,8 +632,14 @@ async function processSession(sessionId) {
       console.log(`   ✅ Origen creado: ${origenId ?? "(error)"}`);
 
     } else {
+      // ── Lead existente: solo registra el nuevo origen (historial de consultas)
       console.log("\n------------------------------------------------------------");
-      console.log("ℹ️  Lead existente — solo se actualizaron campos, sin duplicar registros relacionados");
+      console.log("📎 CREANDO ORIGEN para lead existente (sin tocar área/programa/facultad)...");
+
+      origenId = await createOrigenClientePotencial(
+        buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, actividadCampanaId), token
+      );
+      console.log(`   ✅ Origen creado: ${origenId ?? "(error)"}`);
     }
 
     console.log("\n============================================================");
@@ -696,12 +703,17 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log(JSON.stringify(req.body, null, 2));
 
   const body      = req.body;
-  const sessionId = body.sessionId;
+  // ── CAMBIO: fallback a email si sessionId viene vacío ─────────────────────
+  const sessionId = body.sessionId || body.variables?.Mail || null;
   const newVars   = body.variables || {};
 
   if (!sessionId) {
-    console.log("⚠️  Sin sessionId — ignorando");
+    console.log("⚠️  Sin sessionId ni email — ignorando");
     return res.status(200).json({ ok: true, skipped: true, reason: "sin sessionId" });
+  }
+
+  if (!body.sessionId) {
+    console.log(`   ⚠️  sessionId vacío — usando email como clave de sesión: ${sessionId}`);
   }
 
   const session = getOrCreateSession(sessionId, body);
