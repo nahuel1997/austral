@@ -632,7 +632,7 @@ async function processSession(sessionId) {
       console.log(`   ✅ Origen creado: ${origenId ?? "(error)"}`);
 
     } else {
-      // ── Lead existente: solo registra el nuevo origen (historial de consultas)
+      // ── Lead existente: solo crea nuevo origen, sin tocar área/programa/facultad
       console.log("\n------------------------------------------------------------");
       console.log("📎 CREANDO ORIGEN para lead existente (sin tocar área/programa/facultad)...");
 
@@ -703,7 +703,7 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log(JSON.stringify(req.body, null, 2));
 
   const body      = req.body;
-  // ── CAMBIO: fallback a email si sessionId viene vacío ─────────────────────
+  // ── Fallback a email si sessionId viene vacío ─────────────────────────────
   const sessionId = body.sessionId || body.variables?.Mail || null;
   const newVars   = body.variables || {};
 
@@ -717,7 +717,17 @@ app.post("/webhook/botmaker", async (req, res) => {
   }
 
   const session = getOrCreateSession(sessionId, body);
-  Object.assign(session.vars, newVars);
+
+  // ── Si la sesión ya fue procesada, resetear para nueva consulta ───────────
+  if (session.processed) {
+    console.log("🔄 Nueva consulta del mismo contacto — reseteando sesión");
+    session.processed = false;
+    session.processTimer = null;
+    session.vars = { ...newVars };
+  } else {
+    Object.assign(session.vars, newVars);
+  }
+
   scheduleCleanup(sessionId);
 
   console.log("\n🔍 [DEBUG] Keys acumuladas en sesión:");
@@ -725,11 +735,6 @@ app.post("/webhook/botmaker", async (req, res) => {
 
   console.log(`\n📌 Sesión  : ${sessionId}`);
   console.log(`   Platform : ${body.chatPlatform ?? "(no especificado)"}`);
-
-  if (session.processed) {
-    console.log("✅ Sesión ya procesada — ignorando duplicado");
-    return res.status(200).json({ ok: true, skipped: true, reason: "ya procesado" });
-  }
 
   const tieneRequeridos = hasRequiredVars(session.vars);
   if (!tieneRequeridos) {
