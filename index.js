@@ -331,10 +331,13 @@ function mapVarsToPayload(vars, meta) {
   const codigoDesdeTexto = utmRaw.match(/C[oó]digo:\s*([A-Z0-9\-]+)/i)?.[1] || null;
 
   const codigoVinculacion =
-    vars["CodigoWA"] || vars["codigo_wa"] || vars["Codigo"] || codigoDesdeTexto || null;
+    codigoDesdeTexto ||                                        // 1° texto UTM (clic real en WordPress)
+    vars["CodigoWA"] || vars["codigo_wa"] || vars["Codigo"] || null; // 2° variable dedicada
 
-  if (codigoDesdeTexto && !vars["CodigoWA"]) {
+  if (codigoDesdeTexto) {
     console.log(`   🔎 Código extraído del texto UTM: ${codigoDesdeTexto}`);
+  } else if (vars["CodigoWA"]) {
+    console.log(`   🔎 Código desde variable CodigoWA: ${vars["CodigoWA"]}`);
   }
 
   let utmUrl = null;
