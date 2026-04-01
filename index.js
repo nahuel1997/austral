@@ -373,7 +373,7 @@ function mapVarsToPayload(vars, meta) {
     new_campaignid:          utms.campaign_id  || vars["campaign_id"]  || null,
     new_sourceid:            vars["source_id"] || null,
     new_tema:                vars["ProgramaSeleccionado"] || null,
-    new_consulta:            vars["ReferralURL"] || utmUrl || null,
+    new_consulta: meta.contactId  ? "https://go.botmaker.com/#/chats/" + meta.contactId  : vars["ReferralURL"] || utmUrl || null,
     // ── Nuevos campos ──
     new_campananombre:       vars["Campana"] || null,
     new_actdecampananombre:  vars["ActividadCampana"] || null,
