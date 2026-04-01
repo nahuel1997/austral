@@ -324,9 +324,18 @@ function mapVarsToPayload(vars, meta) {
     vars["ProgramaSeleccionado"] || vars["Programa ID"] ||
     vars["ProgramaID"] || vars["Programa Seleccionado"] || null;
 
-  // ── Resolución de URL: primero por código de vinculación, luego fallback ──
+  // ── Resolución de código de vinculación ──────────────────────────────────
+  // 1) Desde variable dedicada CodigoWA
+  // 2) Extraído del texto del campo UTM con formato "... | Código: UA-XXXX"
+  const utmRaw = vars["UTM"] || vars["utm"] || "";
+  const codigoDesdeTexto = utmRaw.match(/C[oó]digo:\s*([A-Z0-9\-]+)/i)?.[1] || null;
+
   const codigoVinculacion =
-    vars["CodigoWA"] || vars["codigo_wa"] || vars["Codigo"] || null;
+    vars["CodigoWA"] || vars["codigo_wa"] || vars["Codigo"] || codigoDesdeTexto || null;
+
+  if (codigoDesdeTexto && !vars["CodigoWA"]) {
+    console.log(`   🔎 Código extraído del texto UTM: ${codigoDesdeTexto}`);
+  }
 
   let utmUrl = null;
 
@@ -343,7 +352,7 @@ function mapVarsToPayload(vars, meta) {
   // Fallback: variables de URL directas (comportamiento anterior)
   if (!utmUrl) {
     utmUrl =
-      vars["UTM"] || vars["utm"] || vars["URL"] || vars["url"] ||
+      vars["URL"] || vars["url"] ||
       vars["landing_url"] || vars["UTM_URL"] || vars["Url"] || null;
     if (utmUrl) console.log(`   🔗 URL para UTMs encontrada en vars: ${utmUrl}`);
     else        console.log("   ⚠️  No se encontró URL ni código de vinculación");
@@ -373,7 +382,9 @@ function mapVarsToPayload(vars, meta) {
     new_campaignid:          utms.campaign_id  || vars["campaign_id"]  || null,
     new_sourceid:            vars["source_id"] || null,
     new_tema:                vars["ProgramaSeleccionado"] || null,
-    new_consulta: meta.contactId  ? "https://go.botmaker.com/#/chats/" + meta.contactId  : vars["ReferralURL"] || utmUrl || null,
+    new_consulta:            meta.contactId
+                               ? "https://go.botmaker.com/#/chats/" + meta.contactId
+                               : vars["ReferralURL"] || utmUrl || null,
     // ── Nuevos campos ──
     new_campananombre:       vars["Campana"] || null,
     new_actdecampananombre:  vars["ActividadCampana"] || null,
@@ -607,7 +618,6 @@ async function processSession(sessionId) {
     let interesId = null, relacionId = null, facultadRelId = null, origenId = null;
 
     if (leadAction === "created") {
-      // ── Lead nuevo: crea todos los registros relacionados ──────────────────
       console.log("\n------------------------------------------------------------");
       console.log("📎 CREANDO REGISTROS RELACIONADOS (lead nuevo)...");
 
@@ -632,7 +642,6 @@ async function processSession(sessionId) {
       console.log(`   ✅ Origen creado: ${origenId ?? "(error)"}`);
 
     } else {
-      // ── Lead existente: solo crea nuevo origen, sin tocar área/programa/facultad
       console.log("\n------------------------------------------------------------");
       console.log("📎 CREANDO ORIGEN para lead existente (sin tocar área/programa/facultad)...");
 
@@ -703,7 +712,6 @@ app.post("/webhook/botmaker", async (req, res) => {
   console.log(JSON.stringify(req.body, null, 2));
 
   const body      = req.body;
-  // ── Fallback a email si sessionId viene vacío ─────────────────────────────
   const sessionId = body.sessionId || body.variables?.Mail || null;
   const newVars   = body.variables || {};
 
@@ -718,7 +726,6 @@ app.post("/webhook/botmaker", async (req, res) => {
 
   const session = getOrCreateSession(sessionId, body);
 
-  // ── Si la sesión ya fue procesada, resetear para nueva consulta ───────────
   if (session.processed) {
     console.log("🔄 Nueva consulta del mismo contacto — reseteando sesión");
     session.processed = false;
