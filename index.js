@@ -76,15 +76,6 @@ const urlTrackingStore = new Map();
 const URL_TRACKING_TTL = 48 * 60 * 60 * 1000; // 48h
 
 
-
-function mapProgramaNombre(nombreBot) {
-  if (!nombreBot?.trim()) return null;
-  const mapped = PROGRAMA_MAPPER[nombreBot.trim()];
-  if (!mapped) console.log(`   ⚠️  Programa "${nombreBot}" no encontrado en el mapper — se usará tal cual`);
-  else         console.log(`   🗺️  Programa mapeado: "${nombreBot}" → "${mapped}"`);
-  return mapped || nombreBot;
-}
-
 // ─── Parser de UTMs desde URL ─────────────────────────────────────────────────
 function parseUTMs(url) {
   if (!url?.trim()) return {};
