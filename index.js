@@ -229,6 +229,51 @@ async function findActividadCampanaIdByName(name, token) {
   }
 }
 
+// ─── Buscar área existente de un lead ────────────────────────────────────────
+async function findAreaByLead(leadId, token) {
+  console.log(`   🔍 Buscando áreas existentes del lead: ${leadId}`);
+  try {
+    const url = `${CRM_BASE_URL}/new_interesdelcontactos?$filter=_new_clientepotencial_value eq '${leadId}'&$select=_new_interes_value&$top=50`;
+    const { data } = await axios.get(url, { headers: crmHeaders(token) });
+    const ids = data.value?.map(r => r._new_interes_value).filter(Boolean) ?? [];
+    console.log(`   ✅ Áreas encontradas en lead: ${ids.length > 0 ? ids.join(", ") : "(ninguna)"}`);
+    return ids;
+  } catch (e) {
+    console.error(`   💥 Error buscando áreas del lead:`, e.response?.data ?? e.message);
+    return [];
+  }
+}
+
+// ─── Buscar programas existentes de un lead ───────────────────────────────────
+async function findProgramaByLead(leadId, token) {
+  console.log(`   🔍 Buscando programas existentes del lead: ${leadId}`);
+  try {
+    const url = `${CRM_BASE_URL}/new_relacionclientecarreras?$filter=_new_clientepotencial_value eq '${leadId}'&$select=_new_carrera_value&$top=50`;
+    const { data } = await axios.get(url, { headers: crmHeaders(token) });
+    const ids = data.value?.map(r => r._new_carrera_value).filter(Boolean) ?? [];
+    console.log(`   ✅ Programas encontrados en lead: ${ids.length > 0 ? ids.join(", ") : "(ninguno)"}`);
+    return ids;
+  } catch (e) {
+    console.error(`   💥 Error buscando programas del lead:`, e.response?.data ?? e.message);
+    return [];
+  }
+}
+
+// ─── Buscar facultades existentes de un lead ──────────────────────────────────
+async function findFacultadByLead(leadId, token) {
+  console.log(`   🔍 Buscando facultades existentes del lead: ${leadId}`);
+  try {
+    const url = `${CRM_BASE_URL}/new_facultaddeorigens?$filter=_new_clientepotencial_value eq '${leadId}'&$select=_new_unidaddenegocio_value&$top=50`;
+    const { data } = await axios.get(url, { headers: crmHeaders(token) });
+    const ids = data.value?.map(r => r._new_unidaddenegocio_value).filter(Boolean) ?? [];
+    console.log(`   ✅ Facultades encontradas en lead: ${ids.length > 0 ? ids.join(", ") : "(ninguna)"}`);
+    return ids;
+  } catch (e) {
+    console.error(`   💥 Error buscando facultades del lead:`, e.response?.data ?? e.message);
+    return [];
+  }
+}
+
 // ─── Mapear variables al formato interno ─────────────────────────────────────
 function mapVarsToPayload(vars, meta) {
   const canal    = "WhatsApp";
@@ -560,8 +605,44 @@ async function processSession(sessionId) {
 
     } else {
       console.log("\n------------------------------------------------------------");
-      console.log("📎 CREANDO ORIGEN para lead existente (sin tocar área/programa/facultad)...");
+      console.log("📎 VERIFICANDO REGISTROS RELACIONADOS (lead existente)...");
 
+      // ─── Buscar registros relacionados ya existentes en el lead ──────────
+      const areasExistentes    = await findAreaByLead(leadId, token);
+      const programasExistentes = await findProgramaByLead(leadId, token);
+      const facultadesExistentes = await findFacultadByLead(leadId, token);
+
+      // ─── Área: crear solo si no existe o es diferente ─────────────────────
+      if (areaId && !areasExistentes.includes(areaId)) {
+        console.log("   Área no encontrada en el lead → creando Interés del contacto...");
+        interesId = await createInteresDelContacto(buildInteresBody(payload, leadId, areaId), token);
+        console.log(`   ✅ Interés creado: ${interesId ?? "(sin área)"}`);
+      } else {
+        console.log(`   ⏭️  Área ya existe en el lead → omitiendo`);
+      }
+
+      // ─── Programa: crear solo si no existe o es diferente ─────────────────
+      if (carreraId && !programasExistentes.includes(carreraId)) {
+        console.log("   Programa no encontrado en el lead → creando Relación cliente-carrera...");
+        relacionId = await createRelacionCarrera(buildRelacionCarreraBody(payload, leadId, carreraId), token);
+        console.log(`   ✅ Relación creada: ${relacionId ?? "(sin programa)"}`);
+      } else {
+        console.log(`   ⏭️  Programa ya existe en el lead → omitiendo`);
+      }
+
+      // ─── Facultad: crear solo si no existe o es diferente ─────────────────
+      if (facultadId && !facultadesExistentes.includes(facultadId)) {
+        console.log("   Facultad no encontrada en el lead → creando Facultad de Origen...");
+        facultadRelId = await createFacultadOrigen(
+          buildFacultadBody(leadId, facultadId, payload.new_facultadnombre), token
+        );
+        console.log(`   ✅ Facultad creada: ${facultadRelId ?? "(sin facultad)"}`);
+      } else {
+        console.log(`   ⏭️  Facultad ya existe en el lead → omitiendo`);
+      }
+
+      // ─── Origen: siempre se crea ──────────────────────────────────────────
+      console.log("   Creando Origen del Cliente Potencial...");
       origenId = await createOrigenClientePotencial(
         buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, actividadCampanaId), token
       );
