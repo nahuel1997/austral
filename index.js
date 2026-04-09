@@ -395,14 +395,23 @@ function buildLeadBody(payload, existing = null) {
   }
 
   if (payload.new_origencandidato) body.new_origencandidato = payload.new_origencandidato;
-  if (payload.new_utm_source)      body.new_utm_source      = payload.new_utm_source;
-  if (payload.new_utm_medium)      body.new_utm_medium      = payload.new_utm_medium;
-  if (payload.new_utm_campaign)    body.new_utm_campaign    = payload.new_utm_campaign;
-  if (payload.new_utm_term)        body.new_utm_term        = payload.new_utm_term;
-  if (payload.new_utm_content)     body.new_utm_content     = payload.new_utm_content;
-  if (payload.new_googleclickid)   body.new_googleclickid   = payload.new_googleclickid;
-  if (payload.new_campaignid)      body.new_campaignid      = payload.new_campaignid;
-  if (payload.new_sourceid)        body.new_sourceid        = payload.new_sourceid;
+
+  // ─── UTMs: solo se escriben si el lead es nuevo ──────────────────────────
+  // Si el lead ya existe (existing != null), no se pisan las UTMs originales.
+  // Las UTMs nuevas quedan guardadas en el Origen del Cliente Potencial.
+  if (!existing) {
+    if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
+    if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
+    if (payload.new_utm_campaign)  body.new_utm_campaign  = payload.new_utm_campaign;
+    if (payload.new_utm_term)      body.new_utm_term      = payload.new_utm_term;
+    if (payload.new_utm_content)   body.new_utm_content   = payload.new_utm_content;
+    if (payload.new_googleclickid) body.new_googleclickid = payload.new_googleclickid;
+    if (payload.new_campaignid)    body.new_campaignid    = payload.new_campaignid;
+    if (payload.new_sourceid)      body.new_sourceid      = payload.new_sourceid;
+  } else {
+    console.log("   ℹ️  Lead existente → UTMs no se actualizan en el lead (quedan en Origen)");
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   if (payload.ownerid) {
     const entity = payload.owneridtype === "team" ? "teams" : "systemusers";
@@ -447,8 +456,8 @@ function buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, activida
 
   if (areaId)    body["new_AreadeInteresId_org_origen@odata.bind"]     = `/new_intereses(${areaId})`;
   if (carreraId) body["new_ProgramadeInteresId_org_origen@odata.bind"] = `/new_carreras(${carreraId})`;
-if (campanaId)          body["new_CampanaId_org_origen@odata.bind"]      = `/campaigns(${campanaId})`;
-if (actividadCampanaId) body["new_ActdeCampanaId_org_origen@odata.bind"] = `/campaignactivities(${actividadCampanaId})`;
+  if (campanaId)          body["new_CampanaId_org_origen@odata.bind"]      = `/campaigns(${campanaId})`;
+  if (actividadCampanaId) body["new_ActdeCampanaId_org_origen@odata.bind"] = `/campaignactivities(${actividadCampanaId})`;
 
   if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
   if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
@@ -563,7 +572,7 @@ async function processSession(sessionId) {
 
     if (existingLead) {
       leadId = existingLead.leadid;
-      console.log(`   ⚠️  Lead YA EXISTE (ID: ${leadId}) → actualizando campos`);
+      console.log(`   ⚠️  Lead YA EXISTE (ID: ${leadId}) → actualizando campos (sin pisar UTMs)`);
       await updateLead(leadId, buildLeadBody(payload, existingLead), token);
       leadAction = "updated";
     } else {
