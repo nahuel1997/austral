@@ -71,7 +71,6 @@ function hasRequiredVars(vars) {
 const ORIGEN_BOT_GUID = "4ed973c6-b5bc-ef11-a72e-002248dfb239";
 
 // ─── Store URL-Tracking ───────────────────────────────────────────────────────
-// Map<codigo, { url, creadoEn, cleanupTimer }>
 const urlTrackingStore = new Map();
 const URL_TRACKING_TTL = 48 * 60 * 60 * 1000; // 48h
 
@@ -283,15 +282,12 @@ function mapVarsToPayload(vars, meta) {
     vars["ProgramaSeleccionado"] || vars["Programa ID"] ||
     vars["ProgramaID"] || vars["Programa Seleccionado"] || null;
 
-  // ── Resolución de código de vinculación ──────────────────────────────────
-  // 1) Desde variable dedicada CodigoWA
-  // 2) Extraído del texto del campo UTM con formato "... | Código: UA-XXXX"
   const utmRaw = vars["UTM"] || vars["utm"] || "";
   const codigoDesdeTexto = utmRaw.match(/C[oó]digo:\s*([A-Z0-9\-]+)/i)?.[1] || null;
 
   const codigoVinculacion =
-    codigoDesdeTexto ||                                        // 1° texto UTM (clic real en WordPress)
-    vars["CodigoWA"] || vars["codigo_wa"] || vars["Codigo"] || null; // 2° variable dedicada
+    codigoDesdeTexto ||
+    vars["CodigoWA"] || vars["codigo_wa"] || vars["Codigo"] || null;
 
   if (codigoDesdeTexto) {
     console.log(`   🔎 Código extraído del texto UTM: ${codigoDesdeTexto}`);
@@ -311,7 +307,6 @@ function mapVarsToPayload(vars, meta) {
     }
   }
 
-  // Fallback: variables de URL directas (comportamiento anterior)
   if (!utmUrl) {
     utmUrl =
       vars["URL"] || vars["url"] ||
@@ -329,7 +324,7 @@ function mapVarsToPayload(vars, meta) {
     mobilephone:             telefono,
     canal,
     new_areadeinteresnombre: vars["Area"] || vars["Area ID"] || vars["AreaID"] || null,
-new_programanombre: programaBot || null,
+    new_programanombre:      programaBot || null,
     new_facultadnombre:      vars["Facultad"] || null,
     new_origencandidato:     26,
     new_interesadoposgrado:  true,
@@ -347,7 +342,6 @@ new_programanombre: programaBot || null,
     new_consulta:            meta.contactId
                                ? "https://go.botmaker.com/#/chats/" + meta.contactId
                                : vars["ReferralURL"] || utmUrl || null,
-    // ── Nuevos campos ──
     new_campananombre:       vars["Campana"] || null,
     new_actdecampananombre:  vars["ActividadCampana"] || null,
   };
@@ -453,10 +447,8 @@ function buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, activida
 
   if (areaId)    body["new_AreadeInteresId_org_origen@odata.bind"]     = `/new_intereses(${areaId})`;
   if (carreraId) body["new_ProgramadeInteresId_org_origen@odata.bind"] = `/new_carreras(${carreraId})`;
-if (campanaId)          body["new_campanaid@odata.bind"]     = `/campaigns(${campanaId})`;
-if (actividadCampanaId) body["new_actdecampanaid@odata.bind"] = `/campaignactivities(${actividadCampanaId})`;
-  // ⚠️  PENDIENTE: confirmar nombre exacto del campo con admin de Dynamics
-  // if (actividadCampanaId) body["new_ActdeCampanaId@odata.bind"] = `/campaignactivities(${actividadCampanaId})`;
+  if (campanaId)          body["new_campanaid@odata.bind"]      = `/campaigns(${campanaId})`;
+  if (actividadCampanaId) body["new_actdecampanaid@odata.bind"] = `/campaignactivities(${actividadCampanaId})`;
 
   if (payload.new_utm_source)    body.new_utm_source    = payload.new_utm_source;
   if (payload.new_utm_medium)    body.new_utm_medium    = payload.new_utm_medium;
@@ -496,6 +488,10 @@ async function createFacultadOrigen(body, token) {
 }
 
 async function createOrigenClientePotencial(body, token) {
+  // ─── LOG DE DEBUG: body exacto que se envía a Dynamics ───────────────────
+  console.log("   📤 BODY org_origens enviado a Dynamics:");
+  console.log(JSON.stringify(body, null, 2));
+  // ─────────────────────────────────────────────────────────────────────────
   const { data } = await axios.post(`${CRM_BASE_URL}/org_origens`, body, { headers: crmHeaders(token) });
   return data?.activityid;
 }
@@ -577,7 +573,6 @@ async function processSession(sessionId) {
       console.log(`   ✅ Lead creado con ID: ${leadId}`);
     }
 
-    // ─── Registros relacionados ───────────────────────────────────────────────
     let interesId = null, relacionId = null, facultadRelId = null, origenId = null;
 
     if (leadAction === "created") {
@@ -608,12 +603,10 @@ async function processSession(sessionId) {
       console.log("\n------------------------------------------------------------");
       console.log("📎 VERIFICANDO REGISTROS RELACIONADOS (lead existente)...");
 
-      // ─── Buscar registros relacionados ya existentes en el lead ──────────
-      const areasExistentes    = await findAreaByLead(leadId, token);
-      const programasExistentes = await findProgramaByLead(leadId, token);
+      const areasExistentes      = await findAreaByLead(leadId, token);
+      const programasExistentes  = await findProgramaByLead(leadId, token);
       const facultadesExistentes = await findFacultadByLead(leadId, token);
 
-      // ─── Área: crear solo si no existe o es diferente ─────────────────────
       if (areaId && !areasExistentes.includes(areaId)) {
         console.log("   Área no encontrada en el lead → creando Interés del contacto...");
         interesId = await createInteresDelContacto(buildInteresBody(payload, leadId, areaId), token);
@@ -622,7 +615,6 @@ async function processSession(sessionId) {
         console.log(`   ⏭️  Área ya existe en el lead → omitiendo`);
       }
 
-      // ─── Programa: crear solo si no existe o es diferente ─────────────────
       if (carreraId && !programasExistentes.includes(carreraId)) {
         console.log("   Programa no encontrado en el lead → creando Relación cliente-carrera...");
         relacionId = await createRelacionCarrera(buildRelacionCarreraBody(payload, leadId, carreraId), token);
@@ -631,7 +623,6 @@ async function processSession(sessionId) {
         console.log(`   ⏭️  Programa ya existe en el lead → omitiendo`);
       }
 
-      // ─── Facultad: crear solo si no existe o es diferente ─────────────────
       if (facultadId && !facultadesExistentes.includes(facultadId)) {
         console.log("   Facultad no encontrada en el lead → creando Facultad de Origen...");
         facultadRelId = await createFacultadOrigen(
@@ -642,7 +633,6 @@ async function processSession(sessionId) {
         console.log(`   ⏭️  Facultad ya existe en el lead → omitiendo`);
       }
 
-      // ─── Origen: siempre se crea ──────────────────────────────────────────
       console.log("   Creando Origen del Cliente Potencial...");
       origenId = await createOrigenClientePotencial(
         buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, actividadCampanaId), token
