@@ -453,7 +453,8 @@ function buildOrigenBody(payload, leadId, areaId, carreraId, campanaId, activida
 
   if (areaId)    body["new_AreadeInteresId_org_origen@odata.bind"]     = `/new_intereses(${areaId})`;
   if (carreraId) body["new_ProgramadeInteresId_org_origen@odata.bind"] = `/new_carreras(${carreraId})`;
-  if (campanaId) body["new_CampanaId@odata.bind"] = `/campaigns(${campanaId})`;
+if (campanaId)          body["new_campanaid@odata.bind"]     = `/campaigns(${campanaId})`;
+if (actividadCampanaId) body["new_actdecampanaid@odata.bind"] = `/campaignactivities(${actividadCampanaId})`;
   // ⚠️  PENDIENTE: confirmar nombre exacto del campo con admin de Dynamics
   // if (actividadCampanaId) body["new_ActdeCampanaId@odata.bind"] = `/campaignactivities(${actividadCampanaId})`;
 
